@@ -1,0 +1,19 @@
+{
+  "name": "HoennDex — TCG Business Tracker",
+  "short_name": "HoennDex",
+  "description": "Track cost basis, market value, sales, trades, and per-show accounting for your Pokémon TCG vending business.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#1f2530",
+  "theme_color": "#e3350d",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

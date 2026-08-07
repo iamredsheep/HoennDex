@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Maskable-safe: key content kept within the center 80% safe zone -->
+  <rect width="512" height="512" fill="#1f2530"/>
+  <g>
+    <!-- Pokeball -->
+    <circle cx="256" cy="256" r="150" fill="#ffffff" stroke="#12161d" stroke-width="14"/>
+    <path d="M106 256a150 150 0 0 1 300 0Z" fill="#e3350d" stroke="#12161d" stroke-width="14"/>
+    <line x1="106" y1="256" x2="406" y2="256" stroke="#12161d" stroke-width="14"/>
+    <circle cx="256" cy="256" r="46" fill="#ffffff" stroke="#12161d" stroke-width="14"/>
+    <circle cx="256" cy="256" r="20" fill="#ffffff" stroke="#12161d" stroke-width="10"/>
+  </g>
+</svg>

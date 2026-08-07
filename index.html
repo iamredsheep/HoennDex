@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>HoennDex — TCG Business Tracker</title>
+<meta name="description" content="Track cost basis, market value, sales, trades, and per-show accounting for your Pokémon TCG vending business.">
+<meta name="theme-color" content="#e3350d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="HoennDex">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <div class="brand">
+    <img src="icon.svg" alt="" class="brand-logo" width="30" height="30">
+    <h1>HoennDex</h1>
+  </div>
+  <div class="header-meta">
+    <button class="btn install-btn" id="installBtn" hidden>⤓ Install app</button>
+    <span id="saveStatus" class="save-status">All changes saved locally</span>
+  </div>
+</header>
+
+<nav class="tabs" id="tabNav">
+  <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+  <button class="tab-btn" data-tab="inventory">Inventory</button>
+  <button class="tab-btn" data-tab="shows">Shows</button>
+  <button class="tab-btn" data-tab="purchases">Purchases</button>
+  <button class="tab-btn" data-tab="sales">Sales</button>
+  <button class="tab-btn" data-tab="trades">Trades</button>
+  <button class="tab-btn" data-tab="expenses">Expenses</button>
+  <button class="tab-btn" data-tab="backup">Backup</button>
+</nav>
+
+<main id="app">
+
+  <!-- DASHBOARD -->
+  <section class="tab-panel active" id="tab-dashboard">
+    <div class="stat-grid" id="statGrid"></div>
+    <div class="panel-row">
+      <div class="card">
+        <h2>Recent Activity</h2>
+        <div class="table-wrap"><table id="recentActivityTable"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h2>Top Inventory by Market Value</h2>
+        <div class="table-wrap"><table id="topInventoryTable"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- INVENTORY -->
+  <section class="tab-panel" id="tab-inventory">
+    <div class="toolbar">
+      <input type="search" id="invSearch" placeholder="Search name, set, card #...">
+      <select id="invCategoryFilter">
+        <option value="">All Categories</option>
+        <option value="Single Card">Single Card</option>
+        <option value="Sealed Product">Sealed Product</option>
+        <option value="Supplies/Other">Supplies/Other</option>
+      </select>
+      <span class="spacer"></span>
+      <button class="btn secondary" id="invExportCsv">Export CSV</button>
+      <button class="btn primary" id="invAddBtn">+ Add Item</button>
+    </div>
+    <div class="table-wrap">
+      <table id="inventoryTable">
+        <thead>
+          <tr>
+            <th data-sort="name">Name</th>
+            <th data-sort="category">Category</th>
+            <th data-sort="set">Set</th>
+            <th data-sort="cardNumber">#</th>
+            <th data-sort="condition">Condition</th>
+            <th data-sort="quantity">Qty</th>
+            <th data-sort="costPerUnit">Cost/Ea</th>
+            <th data-sort="marketPerUnit">Market/Ea</th>
+            <th data-sort="totalCost">Total Cost</th>
+            <th data-sort="totalMarket">Total Market</th>
+            <th data-sort="dateAcquired">Acquired</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- SHOWS / EVENTS -->
+  <section class="tab-panel" id="tab-shows">
+    <div class="toolbar">
+      <span class="spacer"></span>
+      <button class="btn secondary" id="showsExportCsv">Export CSV</button>
+      <button class="btn primary" id="showsAddBtn">+ Add Show</button>
+    </div>
+    <div class="table-wrap">
+      <table id="showsTable">
+        <thead>
+          <tr>
+            <th>Date</th><th>Show</th><th>Location</th><th class="num">Table Rent</th>
+            <th class="num">Buys</th><th class="num">Sales Rev</th><th class="num">Gross Profit</th>
+            <th class="num">Net Profit</th><th class="num">Cash Flow</th><th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="muted" style="margin-top:12px;">
+      <strong>Net Profit</strong> = sales gross profit (revenue − cost of cards sold − fees) − table rent − expenses tagged to this show.
+      <strong>Cash Flow</strong> = cash collected from sales − cash spent on buys, table rent, and show expenses (how much your cash changed at the event).
+      Tag a Sale, Purchase, or Expense to a show using the “Show / Event” field on each of those.
+    </p>
+  </section>
+
+  <!-- PURCHASES -->
+  <section class="tab-panel" id="tab-purchases">
+    <div class="toolbar">
+      <span class="spacer"></span>
+      <button class="btn secondary" id="purExportCsv">Export CSV</button>
+      <button class="btn primary" id="purAddBtn">+ Add Purchase</button>
+    </div>
+    <div class="table-wrap">
+      <table id="purchasesTable">
+        <thead>
+          <tr><th>Date</th><th>Vendor</th><th>Category</th><th>Description</th><th>Amount</th><th>Notes</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- SALES -->
+  <section class="tab-panel" id="tab-sales">
+    <div class="toolbar">
+      <span class="spacer"></span>
+      <button class="btn secondary" id="salesExportCsv">Export CSV</button>
+      <button class="btn primary" id="salesAddBtn">+ New Sale</button>
+    </div>
+    <div class="table-wrap">
+      <table id="salesTable">
+        <thead>
+          <tr><th>Date</th><th>Buyer</th><th>Platform</th><th>Items</th><th>Revenue</th><th>Fees</th><th>Shipping</th><th>COGS</th><th>Net Profit</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- TRADES -->
+  <section class="tab-panel" id="tab-trades">
+    <div class="toolbar">
+      <span class="spacer"></span>
+      <button class="btn secondary" id="tradesExportCsv">Export CSV</button>
+      <button class="btn primary" id="tradesAddBtn">+ New Trade</button>
+    </div>
+    <div class="table-wrap">
+      <table id="tradesTable">
+        <thead>
+          <tr><th>Date</th><th>Partner</th><th>Given</th><th>Given Value</th><th>Received</th><th>Received Value</th><th>Net</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- EXPENSES -->
+  <section class="tab-panel" id="tab-expenses">
+    <div class="toolbar">
+      <span class="spacer"></span>
+      <button class="btn secondary" id="expExportCsv">Export CSV</button>
+      <button class="btn primary" id="expAddBtn">+ Add Expense</button>
+    </div>
+    <div class="table-wrap">
+      <table id="expensesTable">
+        <thead>
+          <tr><th>Date</th><th>Category</th><th>Description</th><th>Amount</th><th>Notes</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- BACKUP -->
+  <section class="tab-panel" id="tab-backup">
+    <div class="card narrow">
+      <h2>Backup &amp; Restore</h2>
+      <p class="muted">Your data is stored locally in this browser only. Export a backup regularly, especially before clearing browser data.</p>
+      <div class="backup-actions">
+        <button class="btn primary" id="backupExportBtn">Download Backup (JSON)</button>
+        <label class="btn secondary file-btn">
+          Restore from Backup
+          <input type="file" id="backupImportInput" accept="application/json" hidden>
+        </label>
+      </div>
+      <hr>
+      <h3>Danger Zone</h3>
+      <p class="muted">Permanently erase all inventory, sales, purchases, trades, and expense records from this browser.</p>
+      <button class="btn danger" id="clearAllBtn">Clear All Data</button>
+    </div>
+  </section>
+
+</main>
+
+<!-- Generic modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" id="modalBox">
+    <div class="modal-header">
+      <h2 id="modalTitle">Title</h2>
+      <button class="modal-close" id="modalCloseBtn">&times;</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+<script>
+  // Register the service worker for offline use + installability.
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(err => console.warn('SW registration failed:', err));
+    });
+  }
+</script>
+</body>
+</html>
