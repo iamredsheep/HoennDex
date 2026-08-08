@@ -128,6 +128,22 @@ td.wrap { white-space: normal; max-width: 260px; }
 .pos { color: var(--green); font-weight: 600; }
 .neg { color: var(--red); font-weight: 600; }
 
+/* Sticky first column (keeps card name in view while scrolling other columns) */
+th.sticky-col, td.sticky-col {
+  position: sticky;
+  left: 0;
+  background: var(--card-bg);
+  border-right: 1px solid var(--border);
+}
+th.sticky-col { z-index: 3; }
+td.sticky-col { z-index: 1; }
+tbody tr:hover .sticky-col { background: #fafbfc; }
+
+/* Inventory overview table */
+.overview-table { font-size: 0.86rem; }
+.overview-table tr.ov-total td { font-weight: 700; border-top: 2px solid var(--border); border-bottom: none; }
+.overview-table td, .overview-table th { white-space: nowrap; }
+
 .row-actions { display: flex; gap: 6px; }
 
 /* Dashboard */

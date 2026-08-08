@@ -1,6 +1,6 @@
 /* HoennDex service worker — offline app shell caching.
    Bump CACHE_VERSION whenever any cached file changes so clients update. */
-const CACHE_VERSION = 'hoenndex-v3';
+const CACHE_VERSION = 'hoenndex-v5';
 const APP_SHELL = [
   './',
   './index.html',
@@ -35,6 +35,6 @@ self.addEventListener('fetch', event => {
         caches.open(CACHE_VERSION).then(cache => cache.put(req, copy)).catch(() => {});
         return res;
       })
-      .catch(() => caches.match(req).then(hit => hit || caches.match('./index.html')))
+      .catch(() => caches.match(req, { ignoreSearch: true }).then(hit => hit || caches.match('./index.html')))
   );
 });

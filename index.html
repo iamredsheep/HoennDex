@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon.svg">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 
@@ -59,13 +59,19 @@
 
   <!-- INVENTORY -->
   <section class="tab-panel" id="tab-inventory">
+    <div id="invOverview"></div>
     <div class="toolbar">
       <input type="search" id="invSearch" placeholder="Search name, set, card #...">
       <select id="invCategoryFilter">
-        <option value="">All Categories</option>
+        <option value="">All Types</option>
         <option value="Single Card">Single Card</option>
-        <option value="Sealed Product">Sealed Product</option>
-        <option value="Supplies/Other">Supplies/Other</option>
+        <option value="Graded Slabs">Graded Slabs</option>
+      </select>
+      <select id="invEraFilter">
+        <option value="">All Eras</option>
+        <option value="Modern">Modern</option>
+        <option value="Mid-Era">Mid-Era</option>
+        <option value="Vintage">Vintage</option>
       </select>
       <span class="spacer"></span>
       <button class="btn secondary" id="invExportCsv">Export CSV</button>
@@ -75,17 +81,18 @@
       <table id="inventoryTable">
         <thead>
           <tr>
-            <th data-sort="name">Name</th>
-            <th data-sort="category">Category</th>
-            <th data-sort="set">Set</th>
-            <th data-sort="cardNumber">#</th>
-            <th data-sort="condition">Condition</th>
-            <th data-sort="quantity">Qty</th>
-            <th data-sort="costPerUnit">Cost/Ea</th>
-            <th data-sort="marketPerUnit">Market/Ea</th>
-            <th data-sort="totalCost">Total Cost</th>
-            <th data-sort="totalMarket">Total Market</th>
-            <th data-sort="dateAcquired">Acquired</th>
+            <th class="sticky-col">Name</th>
+            <th>Type</th>
+            <th>Era</th>
+            <th>Set</th>
+            <th>#</th>
+            <th>Condition</th>
+            <th class="num">Qty</th>
+            <th class="num">Cost/Ea</th>
+            <th class="num">Market/Ea</th>
+            <th class="num">Total Cost</th>
+            <th class="num">Total Market</th>
+            <th>Acquired</th>
             <th></th>
           </tr>
         </thead>
@@ -248,7 +255,7 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="app.js"></script>
+<script src="app.js?v=5"></script>
 <script>
   // Register the service worker for offline use + installability.
   if ('serviceWorker' in navigator) {

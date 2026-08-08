@@ -5,7 +5,8 @@
 
 const STORE_KEY = 'pkmnTcgTracker_v1';
 
-const CATEGORIES = ['Single Card', 'Sealed Product', 'Supplies/Other'];
+const CATEGORIES = ['Single Card', 'Graded Slabs'];
+const ERAS = ['Modern', 'Mid-Era', 'Vintage'];
 const CONDITIONS = ['NM', 'LP', 'MP', 'HP', 'DMG', 'Sealed'];
 const SOURCES = ['Purchased', 'Trade', 'Pulled/Opened', 'Other'];
 const PLATFORMS = ['eBay', 'TCGPlayer', 'Facebook/Marketplace', 'Whatnot', 'Local/Card Show', 'Other'];
@@ -166,13 +167,18 @@ function invTotals(item) {
   return { totalCost: item.quantity * item.costPerUnit, totalMarket: item.quantity * item.marketPerUnit };
 }
 
+function isSlab(item) { return item.category === 'Graded Slabs' || item.graded; }
+
 function renderInventory() {
+  renderInventoryOverview();
   const tbody = document.querySelector('#inventoryTable tbody');
   const search = document.getElementById('invSearch').value.trim().toLowerCase();
   const catFilter = document.getElementById('invCategoryFilter').value;
+  const eraFilter = document.getElementById('invEraFilter').value;
 
   let rows = DATA.inventory.filter(item => {
     if (catFilter && item.category !== catFilter) return false;
+    if (eraFilter && (item.era || '') !== eraFilter) return false;
     if (search) {
       const hay = [item.name, item.set, item.cardNumber, item.notes].join(' ').toLowerCase();
       if (!hay.includes(search)) return false;
@@ -184,19 +190,20 @@ function renderInventory() {
 
   tbody.innerHTML = '';
   if (rows.length === 0) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="12">No inventory items yet.</td></tr>`;
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="13">No inventory items yet.</td></tr>`;
     return;
   }
 
   for (const item of rows) {
     const { totalCost, totalMarket } = invTotals(item);
-    const conditionLabel = item.graded
-      ? `${esc(item.gradingCompany || '')} ${esc(item.grade || '')} <span class="badge graded">GRADED</span>`
+    const conditionLabel = isSlab(item)
+      ? `${esc(item.gradingCompany || '')} ${esc(item.grade || '')} <span class="badge graded">SLAB</span>`
       : esc(item.condition || '');
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td class="wrap">${esc(item.name)}</td>
+      <td class="wrap sticky-col">${esc(item.name)}</td>
       <td>${esc(item.category)}</td>
+      <td>${esc(item.era || '')}</td>
       <td>${esc(item.set)}</td>
       <td>${esc(item.cardNumber)}</td>
       <td>${conditionLabel}</td>
@@ -216,6 +223,57 @@ function renderInventory() {
   }
 }
 
+// Overview: cost basis (COGS on hand), market value, and unrealized P/L by era sub-category.
+function renderInventoryOverview() {
+  const el = document.getElementById('invOverview');
+  if (!el) return;
+  const keys = [...ERAS, 'Uncategorized'];
+  const groups = {};
+  keys.forEach(k => groups[k] = { items: 0, qty: 0, cost: 0, market: 0 });
+  for (const it of DATA.inventory) {
+    const key = ERAS.includes(it.era) ? it.era : 'Uncategorized';
+    const g = groups[key];
+    g.items++;
+    g.qty += num(it.quantity);
+    g.cost += num(it.quantity) * num(it.costPerUnit);
+    g.market += num(it.quantity) * num(it.marketPerUnit);
+  }
+  const shown = keys.filter(k => groups[k].items > 0 || ERAS.includes(k));
+  const tot = { items: 0, qty: 0, cost: 0, market: 0 };
+  shown.forEach(k => { tot.items += groups[k].items; tot.qty += groups[k].qty; tot.cost += groups[k].cost; tot.market += groups[k].market; });
+
+  const rowHtml = (label, g, isTotal) => {
+    const unreal = g.market - g.cost;
+    const margin = g.cost > 0 ? (unreal / g.cost) * 100 : 0;
+    return `<tr${isTotal ? ' class="ov-total"' : ''}>
+      <td class="sticky-col">${esc(label)}</td>
+      <td class="num">${g.items}</td>
+      <td class="num">${g.qty}</td>
+      <td class="num">${money(g.cost)}</td>
+      <td class="num">${money(g.market)}</td>
+      <td class="num ${unreal >= 0 ? 'pos' : 'neg'}">${money(unreal)}</td>
+      <td class="num ${unreal >= 0 ? 'pos' : 'neg'}">${g.cost > 0 ? (margin >= 0 ? '+' : '') + margin.toFixed(1) + '%' : '—'}</td>
+    </tr>`;
+  };
+
+  el.innerHTML = `
+    <div class="card" style="margin-bottom:16px;">
+      <h2 style="margin-bottom:10px;">Inventory Overview — Cost Basis by Era</h2>
+      <div class="table-wrap" style="box-shadow:none;border:none;">
+        <table class="overview-table">
+          <thead><tr>
+            <th class="sticky-col">Category</th><th class="num">Items</th><th class="num">Qty</th>
+            <th class="num">Cost Basis</th><th class="num">Market Value</th><th class="num">Unrealized</th><th class="num">Margin</th>
+          </tr></thead>
+          <tbody>
+            ${shown.map(k => rowHtml(k, groups[k], false)).join('')}
+            ${rowHtml('TOTAL', tot, true)}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
 document.querySelector('#inventoryTable tbody').addEventListener('click', e => {
   const btn = e.target.closest('button');
   if (!btn) return;
@@ -233,14 +291,14 @@ document.querySelector('#inventoryTable tbody').addEventListener('click', e => {
 
 document.getElementById('invSearch').addEventListener('input', renderInventory);
 document.getElementById('invCategoryFilter').addEventListener('change', renderInventory);
+document.getElementById('invEraFilter').addEventListener('change', renderInventory);
 document.getElementById('invAddBtn').addEventListener('click', () => openInventoryModal(null));
 document.getElementById('invExportCsv').addEventListener('click', () => {
   exportCsv('inventory.csv', DATA.inventory, [
     { label: 'Name', get: r => r.name }, { label: 'Category', get: r => r.category },
-    { label: 'Set', get: r => r.set }, { label: 'Card #', get: r => r.cardNumber },
-    { label: 'Condition', get: r => r.condition }, { label: 'Graded', get: r => r.graded ? 'Yes' : 'No' },
-    { label: 'Grading Co', get: r => r.gradingCompany }, { label: 'Grade', get: r => r.grade },
-    { label: 'Quantity', get: r => r.quantity }, { label: 'Cost/Unit', get: r => r.costPerUnit },
+    { label: 'Era', get: r => r.era }, { label: 'Set', get: r => r.set }, { label: 'Card #', get: r => r.cardNumber },
+    { label: 'Condition', get: r => isSlab(r) ? '' : r.condition }, { label: 'Grading Co', get: r => r.gradingCompany },
+    { label: 'Grade', get: r => r.grade }, { label: 'Quantity', get: r => r.quantity }, { label: 'Cost/Unit', get: r => r.costPerUnit },
     { label: 'Market/Unit', get: r => r.marketPerUnit }, { label: 'Date Acquired', get: r => r.dateAcquired },
     { label: 'Source', get: r => r.source }, { label: 'Notes', get: r => r.notes },
   ]);
@@ -249,17 +307,22 @@ document.getElementById('invExportCsv').addEventListener('click', () => {
 function openInventoryModal(item) {
   const isEdit = !!item;
   const v = item || {
-    category: 'Single Card', name: '', set: '', cardNumber: '', condition: 'NM',
-    graded: false, gradingCompany: 'PSA', grade: '', quantity: 1, costPerUnit: 0,
+    category: 'Single Card', era: 'Modern', name: '', set: '', cardNumber: '', condition: 'NM',
+    gradingCompany: 'PSA', grade: '', quantity: 1, costPerUnit: 0,
     marketPerUnit: 0, dateAcquired: todayISO(), source: 'Purchased', notes: ''
   };
+  const slabInit = v.category === 'Graded Slabs' || v.graded;
 
   const html = `
     <div class="form-grid">
-      <div class="field"><label>Category</label>
+      <div class="field"><label>Type</label>
         <select id="f_category">${fieldOptions(CATEGORIES, v.category)}</select>
       </div>
-      <div class="field"><label>Name</label><input id="f_name" type="text" value="${esc(v.name)}" placeholder="e.g. Charizard ex"></div>
+      <div class="field"><label>Era</label>
+        <select id="f_era">${fieldOptions(ERAS, ERAS.includes(v.era) ? v.era : 'Modern')}</select>
+      </div>
+
+      <div class="field full"><label>Name</label><input id="f_name" type="text" value="${esc(v.name)}" placeholder="e.g. Charizard ex"></div>
 
       <div class="field"><label>Set / Expansion</label><input id="f_set" type="text" value="${esc(v.set)}" placeholder="e.g. Obsidian Flames"></div>
       <div class="field"><label>Card #</label><input id="f_cardNumber" type="text" value="${esc(v.cardNumber)}" placeholder="e.g. 125/197"></div>
@@ -269,13 +332,10 @@ function openInventoryModal(item) {
       </div>
       <div class="field"><label>Quantity</label><input id="f_quantity" type="number" min="0" step="1" value="${v.quantity}"></div>
 
-      <div class="field full">
-        <label class="checkbox-field"><input type="checkbox" id="f_graded" ${v.graded ? 'checked' : ''}> Graded card</label>
-      </div>
-      <div class="field" id="wrap_gradingCompany" style="display:${v.graded ? 'block' : 'none'}"><label>Grading Company</label>
+      <div class="field" id="wrap_gradingCompany" style="display:${slabInit ? 'block' : 'none'}"><label>Grading Company</label>
         <select id="f_gradingCompany">${fieldOptions(GRADING_COMPANIES, v.gradingCompany || 'PSA')}</select>
       </div>
-      <div class="field" id="wrap_grade" style="display:${v.graded ? 'block' : 'none'}"><label>Grade</label>
+      <div class="field" id="wrap_grade" style="display:${slabInit ? 'block' : 'none'}"><label>Grade</label>
         <input id="f_grade" type="text" value="${esc(v.grade)}" placeholder="e.g. 10">
       </div>
 
@@ -293,22 +353,26 @@ function openInventoryModal(item) {
     </div>`;
 
   openModal(isEdit ? 'Edit Inventory Item' : 'Add Inventory Item', html, body => {
-    body.querySelector('#f_graded').addEventListener('change', e => {
-      body.querySelector('#wrap_gradingCompany').style.display = e.target.checked ? 'block' : 'none';
-      body.querySelector('#wrap_grade').style.display = e.target.checked ? 'block' : 'none';
-    });
+    const toggleGrading = () => {
+      const slab = body.querySelector('#f_category').value === 'Graded Slabs';
+      body.querySelector('#wrap_gradingCompany').style.display = slab ? 'block' : 'none';
+      body.querySelector('#wrap_grade').style.display = slab ? 'block' : 'none';
+    };
+    body.querySelector('#f_category').addEventListener('change', toggleGrading);
     body.querySelector('#cancelBtn').addEventListener('click', closeModal);
     body.querySelector('#saveBtn').addEventListener('click', () => {
       const name = body.querySelector('#f_name').value.trim();
       if (!name) { alert('Please enter a name.'); return; }
+      const category = body.querySelector('#f_category').value;
       const record = {
         id: isEdit ? item.id : genId(),
-        category: body.querySelector('#f_category').value,
+        category,
+        era: body.querySelector('#f_era').value,
         name,
         set: body.querySelector('#f_set').value.trim(),
         cardNumber: body.querySelector('#f_cardNumber').value.trim(),
         condition: body.querySelector('#f_condition').value,
-        graded: body.querySelector('#f_graded').checked,
+        graded: category === 'Graded Slabs',
         gradingCompany: body.querySelector('#f_gradingCompany').value,
         grade: body.querySelector('#f_grade').value.trim(),
         quantity: num(body.querySelector('#f_quantity').value),
