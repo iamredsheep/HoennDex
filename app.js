@@ -201,11 +201,11 @@ function renderInventory() {
       : esc(item.condition || '');
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td class="wrap sticky-col">${esc(item.name)}</td>
+      <td class="wrap sticky-col sticky-1">${esc(item.name)}</td>
+      <td class="sticky-col sticky-2">${esc(item.cardNumber)}</td>
       <td>${esc(item.category)}</td>
       <td>${esc(item.era || '')}</td>
       <td>${esc(item.set)}</td>
-      <td>${esc(item.cardNumber)}</td>
       <td>${conditionLabel}</td>
       <td class="num">${item.quantity}</td>
       <td class="num">${money(item.costPerUnit)}</td>

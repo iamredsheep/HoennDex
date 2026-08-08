@@ -128,7 +128,7 @@ td.wrap { white-space: normal; max-width: 260px; }
 .pos { color: var(--green); font-weight: 600; }
 .neg { color: var(--red); font-weight: 600; }
 
-/* Sticky first column (keeps card name in view while scrolling other columns) */
+/* Sticky columns (keep card name/# in view while scrolling other columns) */
 th.sticky-col, td.sticky-col {
   position: sticky;
   left: 0;
@@ -138,6 +138,22 @@ th.sticky-col, td.sticky-col {
 th.sticky-col { z-index: 3; }
 td.sticky-col { z-index: 1; }
 tbody tr:hover .sticky-col { background: #fafbfc; }
+
+/* Inventory: two frozen columns — card name + card number, side by side */
+#inventoryTable .sticky-1 {
+  left: 0;
+  width: 160px; min-width: 160px; max-width: 160px;
+  border-right: none;
+  overflow-wrap: anywhere;
+}
+#inventoryTable .sticky-2 {
+  left: 160px;
+  width: 82px; min-width: 82px; max-width: 82px;
+}
+@media (max-width: 640px) {
+  #inventoryTable .sticky-1 { width: 118px; min-width: 118px; max-width: 118px; }
+  #inventoryTable .sticky-2 { left: 118px; width: 70px; min-width: 70px; max-width: 70px; }
+}
 
 /* Inventory overview table */
 .overview-table { font-size: 0.86rem; }

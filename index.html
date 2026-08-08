@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon.svg">
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 
@@ -81,11 +81,11 @@
       <table id="inventoryTable">
         <thead>
           <tr>
-            <th class="sticky-col">Name</th>
+            <th class="sticky-col sticky-1">Name</th>
+            <th class="sticky-col sticky-2">#</th>
             <th>Type</th>
             <th>Era</th>
             <th>Set</th>
-            <th>#</th>
             <th>Condition</th>
             <th class="num">Qty</th>
             <th class="num">Cost/Ea</th>
@@ -255,7 +255,7 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="app.js?v=5"></script>
+<script src="app.js?v=6"></script>
 <script>
   // Register the service worker for offline use + installability.
   if ('serviceWorker' in navigator) {
