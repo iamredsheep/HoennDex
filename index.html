@@ -31,6 +31,7 @@
 <nav class="tabs" id="tabNav">
   <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
   <button class="tab-btn" data-tab="inventory">Inventory</button>
+  <button class="tab-btn" data-tab="lots">Lots</button>
   <button class="tab-btn" data-tab="shows">Shows</button>
   <button class="tab-btn" data-tab="purchases">Purchases</button>
   <button class="tab-btn" data-tab="sales">Sales</button>
@@ -91,6 +92,32 @@
         <tbody></tbody>
       </table>
     </div>
+  </section>
+
+  <!-- BULK LOTS -->
+  <section class="tab-panel" id="tab-lots">
+    <div class="toolbar">
+      <span class="spacer"></span>
+      <button class="btn secondary" id="lotsExportCsv">Export CSV</button>
+      <button class="btn primary" id="lotsAddBtn">+ Add Lot</button>
+    </div>
+    <div class="table-wrap">
+      <table id="lotsTable">
+        <thead>
+          <tr>
+            <th>Date</th><th>Lot</th><th>Vendor</th>
+            <th class="num">Total Cost</th><th class="num">Per Card</th><th class="num">Cards</th>
+            <th class="num">Sold</th><th class="num">Remaining</th>
+            <th class="num">Revenue</th><th class="num">Profit</th><th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="muted" style="margin-top:12px;">
+      A bulk lot is a flat-fee buy (e.g. 100 cards for $180) whose cost is split equally per card ($1.80 each).
+      Click <strong>Open</strong> on a lot, then <strong>Sell a Card</strong> to name a card and record its sale — it shows as sold here and flows into your Sales, Dashboard, and per-show totals with the split cost as COGS.
+    </p>
   </section>
 
   <!-- SHOWS / EVENTS -->
@@ -163,7 +190,7 @@
     <div class="table-wrap">
       <table id="tradesTable">
         <thead>
-          <tr><th>Date</th><th>Partner</th><th>Given</th><th>Given Value</th><th>Received</th><th>Received Value</th><th>Net</th><th></th></tr>
+          <tr><th>Date</th><th>Partner</th><th>Given</th><th class="num">Given Value</th><th>Received</th><th class="num">Received Value</th><th class="num">Cash</th><th class="num">Net</th><th></th></tr>
         </thead>
         <tbody></tbody>
       </table>

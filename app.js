@@ -16,7 +16,7 @@ const GRADING_COMPANIES = ['PSA', 'CGC', 'BGS', 'SGC', 'Other'];
 /* ---------------- Data store ---------------- */
 
 function defaultData() {
-  return { inventory: [], shows: [], purchases: [], sales: [], trades: [], expenses: [] };
+  return { inventory: [], lots: [], shows: [], purchases: [], sales: [], trades: [], expenses: [] };
 }
 
 let DATA = loadData();
@@ -580,26 +580,47 @@ function inventoryOptionsHtml(selectedId) {
 }
 
 function renderSaleLineItems(container) {
-  container.innerHTML = saleLineItems.map((li, idx) => `
+  container.innerHTML = saleLineItems.map((li, idx) => {
+    if (li.lotId) {
+      // Lot-sourced line: card name is free text, cost is fixed at the lot's per-card cost.
+      return `
+    <div class="line-item-row" data-idx="${idx}">
+      <div class="field"><label>Card (lot: ${esc(li.lotName || lotName(li.lotId))})</label>
+        <input class="li-name" type="text" value="${esc(li.name)}" placeholder="Card name"></div>
+      <div class="field"><label>Qty</label><input class="li-qty" type="number" min="1" step="1" value="${li.qty}"></div>
+      <div class="field"><label>Price/Ea</label><input class="li-price" type="number" min="0" step="0.01" value="${li.priceEach}"></div>
+      <div class="field"><label>Cost/Ea</label><input type="text" value="${money(li.costEach)}" disabled></div>
+      <button class="line-item-remove" title="Remove line">&times;</button>
+    </div>`;
+    }
+    return `
     <div class="line-item-row" data-idx="${idx}">
       <div class="field"><label>Item</label>
         <select class="li-item">${inventoryOptionsHtml(li.inventoryId)}</select>
       </div>
       <div class="field"><label>Qty</label><input class="li-qty" type="number" min="1" step="1" value="${li.qty}"></div>
       <div class="field"><label>Price/Ea</label><input class="li-price" type="number" min="0" step="0.01" value="${li.priceEach}"></div>
-      <div class="field"><label>Avail.</label><input type="text" value="${availableQty(li.inventoryId) + (findInventory(li.inventoryId) ? 0 : 0)}" disabled></div>
+      <div class="field"><label>Avail.</label><input type="text" value="${availableQty(li.inventoryId)}" disabled></div>
       <button class="line-item-remove" title="Remove line">&times;</button>
-    </div>`).join('') || `<p class="muted">No items added yet.</p>`;
+    </div>`;
+  }).join('') || `<p class="muted">No items added yet.</p>`;
 
   container.querySelectorAll('.line-item-row').forEach(row => {
     const idx = Number(row.dataset.idx);
-    row.querySelector('.li-item').addEventListener('change', e => {
-      saleLineItems[idx].inventoryId = e.target.value;
-      const inv = findInventory(e.target.value);
-      if (inv) saleLineItems[idx].priceEach = inv.marketPerUnit;
-      renderSaleLineItems(container);
-      updateSaleTotalsDisplay();
-    });
+    const itemSelect = row.querySelector('.li-item');
+    if (itemSelect) {
+      itemSelect.addEventListener('change', e => {
+        saleLineItems[idx].inventoryId = e.target.value;
+        const inv = findInventory(e.target.value);
+        if (inv) saleLineItems[idx].priceEach = inv.marketPerUnit;
+        renderSaleLineItems(container);
+        updateSaleTotalsDisplay();
+      });
+    }
+    const nameInput = row.querySelector('.li-name');
+    if (nameInput) {
+      nameInput.addEventListener('input', e => { saleLineItems[idx].name = e.target.value; });
+    }
     row.querySelector('.li-qty').addEventListener('input', e => {
       saleLineItems[idx].qty = num(e.target.value); updateSaleTotalsDisplay();
     });
@@ -619,6 +640,7 @@ function updateSaleTotalsDisplay() {
   const fees = num(document.getElementById('f_fees').value);
   const shipping = num(document.getElementById('f_shipping').value);
   const cogs = saleLineItems.reduce((s, li) => {
+    if (li.lotId) return s + num(li.costEach) * num(li.qty);
     const inv = findInventory(li.inventoryId);
     return s + (inv ? inv.costPerUnit * num(li.qty) : 0);
   }, 0);
@@ -669,13 +691,14 @@ function openSaleModal(sale) {
     body.querySelector('#cancelBtn').addEventListener('click', closeModal);
 
     body.querySelector('#saveBtn').addEventListener('click', () => {
-      const cleanItems = saleLineItems.filter(i => i.inventoryId && num(i.qty) > 0);
+      const cleanItems = saleLineItems.filter(i => (i.inventoryId || i.lotId) && num(i.qty) > 0);
       if (cleanItems.length === 0) { alert('Add at least one item with a valid quantity.'); return; }
 
       // Temporarily release stock held by the original sale (if editing) so validation reflects true availability
       if (isEdit) releaseInventory(sale.items);
 
       for (const li of cleanItems) {
+        if (li.lotId) continue; // lot lines draw from a bulk pile, not tracked inventory stock
         const inv = findInventory(li.inventoryId);
         if (!inv) { alert('An item in this sale no longer exists in inventory.'); if (isEdit) consumeInventory(sale.items); return; }
         if (num(li.qty) > inv.quantity) {
@@ -686,6 +709,11 @@ function openSaleModal(sale) {
       }
 
       const finalItems = cleanItems.map(li => {
+        if (li.lotId) {
+          const lot = findLot(li.lotId);
+          return { lotId: li.lotId, lotName: lot ? lot.name : (li.lotName || ''), name: (li.name || '').trim() || 'Card from lot',
+                   qty: num(li.qty), priceEach: num(li.priceEach), costEach: lot ? lotPerCard(lot) : num(li.costEach) };
+        }
         const inv = findInventory(li.inventoryId);
         return { inventoryId: inv.id, name: inv.name, qty: num(li.qty), priceEach: num(li.priceEach), costEach: inv.costPerUnit };
       });
@@ -718,18 +746,49 @@ let tradeGivenItems = [];
 let tradeReceivedItems = [];
 
 function tradeTotals(t) {
-  const givenValue = t.given.reduce((s, i) => s + i.qty * i.valueEach, 0);
-  const receivedValue = t.received.reduce((s, i) => s + i.qty * i.valueEach, 0);
-  return { givenValue, receivedValue, net: receivedValue - givenValue };
+  const givenValue = t.given.reduce((s, i) => s + num(i.qty) * num(i.valueEach), 0);
+  const receivedValue = t.received.reduce((s, i) => s + num(i.qty) * num(i.valueEach), 0);
+  const cashReceived = num(t.cashReceived);
+  const cashPaid = num(t.cashPaid);
+  const givenBasis = t.given.reduce((s, i) => s + num(i.qty) * num(i.costEach), 0);
+  // Net market swing including cash — did you come out ahead at market value?
+  const net = (receivedValue + cashReceived) - (givenValue + cashPaid);
+  return { givenValue, receivedValue, cashReceived, cashPaid, givenBasis, net };
+}
+
+// Carryover (substituted) basis: the cost basis of what you gave, plus cash paid, minus
+// cash received, flows into the received cards — allocated by their relative market value.
+function computeTradeCarryover(given, received, cashReceived, cashPaid) {
+  let givenBasis = 0;
+  for (const g of given) {
+    let costEach = (g.costEach !== undefined && g.costEach !== null && g.costEach !== '') ? num(g.costEach) : null;
+    if (costEach === null) { const inv = findInventory(g.inventoryId); costEach = inv ? num(inv.costPerUnit) : 0; }
+    givenBasis += num(g.qty) * costEach;
+  }
+  const raw = givenBasis + num(cashPaid) - num(cashReceived);
+  const totalNewBasis = Math.max(0, raw);
+  const realizedGain = raw < 0 ? -raw : 0; // cash received exceeded your basis → a gain you can't defer
+  const totalRecvValue = received.reduce((s, r) => s + num(r.qty) * num(r.valueEach), 0);
+  const totalRecvQty = received.reduce((s, r) => s + num(r.qty), 0);
+  const allocations = received.map(r => {
+    let share = 0;
+    if (totalRecvValue > 0) share = (num(r.qty) * num(r.valueEach)) / totalRecvValue;
+    else if (totalRecvQty > 0) share = num(r.qty) / totalRecvQty;
+    const basisTotal = totalNewBasis * share;
+    return { basisTotal, basisPerUnit: num(r.qty) > 0 ? basisTotal / num(r.qty) : 0 };
+  });
+  return { givenBasis, totalNewBasis, realizedGain, totalRecvValue, allocations };
 }
 
 function renderTrades() {
   const tbody = document.querySelector('#tradesTable tbody');
   const rows = DATA.trades.slice().sort((a, b) => b.date.localeCompare(a.date));
   tbody.innerHTML = '';
-  if (rows.length === 0) { tbody.innerHTML = `<tr class="empty-row"><td colspan="8">No trades recorded yet.</td></tr>`; return; }
+  if (rows.length === 0) { tbody.innerHTML = `<tr class="empty-row"><td colspan="9">No trades recorded yet.</td></tr>`; return; }
   for (const t of rows) {
-    const { givenValue, receivedValue, net } = tradeTotals(t);
+    const { givenValue, receivedValue, cashReceived, cashPaid, net } = tradeTotals(t);
+    const cashNet = cashReceived - cashPaid;
+    const cashCell = cashNet === 0 ? '—' : (cashNet > 0 ? '+' : '') + money(cashNet);
     const givenLabel = t.given.map(i => `${i.qty}× ${i.name}`).join(', ');
     const receivedLabel = t.received.map(i => `${i.qty}× ${i.name}`).join(', ');
     const tr = document.createElement('tr');
@@ -737,6 +796,7 @@ function renderTrades() {
       <td>${esc(t.date)}</td><td>${esc(t.partner)}</td>
       <td class="wrap">${esc(givenLabel)}</td><td class="num">${money(givenValue)}</td>
       <td class="wrap">${esc(receivedLabel)}</td><td class="num">${money(receivedValue)}</td>
+      <td class="num ${cashNet > 0 ? 'pos' : (cashNet < 0 ? 'neg' : '')}">${cashCell}</td>
       <td class="num ${net >= 0 ? 'pos' : 'neg'}">${money(net)}</td>
       <td><div class="row-actions">
         <button class="btn secondary small" data-act="edit" data-id="${t.id}">Edit</button>
@@ -769,10 +829,19 @@ document.getElementById('tradesExportCsv').addEventListener('click', () => {
   exportCsv('trades.csv', rows, [
     { label: 'Date', get: r => r.date }, { label: 'Partner', get: r => r.partner },
     { label: 'Given', get: r => r.givenLabel }, { label: 'Given Value', get: r => r.givenValue.toFixed(2) },
+    { label: 'Given Cost Basis', get: r => r.givenBasis.toFixed(2) },
     { label: 'Received', get: r => r.receivedLabel }, { label: 'Received Value', get: r => r.receivedValue.toFixed(2) },
-    { label: 'Net', get: r => r.net.toFixed(2) }, { label: 'Notes', get: r => r.notes },
+    { label: 'Cash Received', get: r => r.cashReceived.toFixed(2) }, { label: 'Cash Paid', get: r => r.cashPaid.toFixed(2) },
+    { label: 'Basis to Received', get: r => num(r.carryoverBasis).toFixed(2) },
+    { label: 'Net (mkt)', get: r => r.net.toFixed(2) }, { label: 'Notes', get: r => r.notes },
   ]);
 });
+
+function givenCostEach(li) {
+  if (li.costEach !== undefined && li.costEach !== null && li.costEach !== '') return num(li.costEach);
+  const inv = findInventory(li.inventoryId);
+  return inv ? num(inv.costPerUnit) : 0;
+}
 
 function renderTradeGivenItems(container) {
   container.innerHTML = tradeGivenItems.map((li, idx) => `
@@ -782,7 +851,7 @@ function renderTradeGivenItems(container) {
       </div>
       <div class="field"><label>Qty</label><input class="li-qty" type="number" min="1" step="1" value="${li.qty}"></div>
       <div class="field"><label>Est. Value/Ea</label><input class="li-value" type="number" min="0" step="0.01" value="${li.valueEach}"></div>
-      <div class="field"></div>
+      <div class="field"><label>Your Cost/Ea</label><input type="text" value="${money(givenCostEach(li))}" disabled title="Cost basis from inventory — flows into the received cards"></div>
       <button class="line-item-remove" title="Remove line">&times;</button>
     </div>`).join('') || `<p class="muted">Nothing added yet.</p>`;
 
@@ -791,7 +860,7 @@ function renderTradeGivenItems(container) {
     row.querySelector('.li-item').addEventListener('change', e => {
       tradeGivenItems[idx].inventoryId = e.target.value;
       const inv = findInventory(e.target.value);
-      if (inv) tradeGivenItems[idx].valueEach = inv.marketPerUnit;
+      if (inv) { tradeGivenItems[idx].valueEach = inv.marketPerUnit; tradeGivenItems[idx].costEach = inv.costPerUnit; }
       renderTradeGivenItems(container); updateTradeTotalsDisplay();
     });
     row.querySelector('.li-qty').addEventListener('input', e => { tradeGivenItems[idx].qty = num(e.target.value); updateTradeTotalsDisplay(); });
@@ -824,20 +893,43 @@ function renderTradeReceivedItems(container) {
   });
 }
 
+function readTradeCash() {
+  const dirEl = document.getElementById('f_cashDir');
+  const amtEl = document.getElementById('f_cashAmount');
+  const dir = dirEl ? dirEl.value : 'none';
+  const amt = amtEl ? num(amtEl.value) : 0;
+  return { cashReceived: dir === 'received' ? amt : 0, cashPaid: dir === 'paid' ? amt : 0 };
+}
+
 function updateTradeTotalsDisplay() {
   const el = document.getElementById('tradeTotalsDisplay');
   if (!el) return;
   const givenValue = tradeGivenItems.reduce((s, i) => s + num(i.qty) * num(i.valueEach), 0);
   const receivedValue = tradeReceivedItems.reduce((s, i) => s + num(i.qty) * num(i.valueEach), 0);
-  const net = receivedValue - givenValue;
-  el.innerHTML = `Given: <strong>${money(givenValue)}</strong> &nbsp; Received: <strong>${money(receivedValue)}</strong> &nbsp; Net: <strong class="${net >= 0 ? 'pos' : 'neg'}">${money(net)}</strong>`;
+  const { cashReceived, cashPaid } = readTradeCash();
+  const carry = computeTradeCarryover(tradeGivenItems, tradeReceivedItems, cashReceived, cashPaid);
+  const net = (receivedValue + cashReceived) - (givenValue + cashPaid);
+  const cashLabel = cashReceived ? '+' + money(cashReceived) : (cashPaid ? '-' + money(cashPaid) : '—');
+  const perCard = tradeReceivedItems
+    .map((r, i) => `${esc(r.name || 'Card ' + (i + 1))}: <strong>${money(carry.allocations[i].basisPerUnit)}</strong>/ea`)
+    .join(' &nbsp;·&nbsp; ');
+  const basisFormula = carry.givenBasis || cashPaid || cashReceived
+    ? ` <span class="muted">(your cost ${money(carry.givenBasis)}${cashPaid ? ' + cash paid ' + money(cashPaid) : ''}${cashReceived ? ' − cash received ' + money(cashReceived) : ''})</span>`
+    : '';
+  el.innerHTML = `
+    <div>Given (market): <strong>${money(givenValue)}</strong> &nbsp; Received (market): <strong>${money(receivedValue)}</strong> &nbsp; Cash: <strong>${cashLabel}</strong> &nbsp; Net: <strong class="${net >= 0 ? 'pos' : 'neg'}">${money(net)}</strong></div>
+    <div style="margin-top:6px;">Cost basis assigned to received cards: <strong>${money(carry.totalNewBasis)}</strong>${basisFormula}</div>
+    ${tradeReceivedItems.length ? `<div class="muted" style="margin-top:4px;">${perCard}</div>` : ''}
+    ${carry.realizedGain ? `<div class="neg" style="margin-top:4px;">Cash received exceeds your cost basis by ${money(carry.realizedGain)} — the received cards get $0.00 basis (that overflow is a realized gain).</div>` : ''}`;
 }
 
 function openTradeModal(trade) {
   const isEdit = !!trade;
   tradeGivenItems = isEdit ? trade.given.map(i => ({ ...i })) : [];
   tradeReceivedItems = isEdit ? trade.received.map(i => ({ ...i })) : [];
-  const v = trade || { date: todayISO(), partner: '', notes: '' };
+  const v = trade || { date: todayISO(), partner: '', notes: '', cashReceived: 0, cashPaid: 0 };
+  const initCashDir = num(v.cashReceived) > 0 ? 'received' : (num(v.cashPaid) > 0 ? 'paid' : 'none');
+  const initCashAmount = num(v.cashReceived) > 0 ? num(v.cashReceived) : (num(v.cashPaid) > 0 ? num(v.cashPaid) : 0);
 
   const html = `
     <div class="form-grid">
@@ -852,7 +944,18 @@ function openTradeModal(trade) {
     <h3>Items You Received</h3>
     <div class="line-items" id="receivedWrap"></div>
     <button class="btn secondary small add-line-btn" id="addReceivedBtn">+ Add Received Item</button>
-    ${!isEdit ? `<div class="field" style="margin-top:10px;"><label class="checkbox-field"><input type="checkbox" id="f_addToInv" checked> Add received items to Inventory when saved</label></div>` : ''}
+    ${!isEdit ? `<div class="field" style="margin-top:10px;"><label class="checkbox-field"><input type="checkbox" id="f_addToInv" checked> Add received items to Inventory at their carryover cost basis</label></div>` : ''}
+
+    <div class="form-grid" style="margin-top:10px;">
+      <div class="field"><label>Cash</label>
+        <select id="f_cashDir">
+          <option value="none" ${initCashDir === 'none' ? 'selected' : ''}>No cash</option>
+          <option value="received" ${initCashDir === 'received' ? 'selected' : ''}>You received cash</option>
+          <option value="paid" ${initCashDir === 'paid' ? 'selected' : ''}>You paid cash</option>
+        </select>
+      </div>
+      <div class="field"><label>Cash Amount</label><input id="f_cashAmount" type="number" min="0" step="0.01" value="${initCashAmount}"></div>
+    </div>
 
     <div class="line-totals" id="tradeTotalsDisplay"></div>
 
@@ -879,6 +982,8 @@ function openTradeModal(trade) {
       tradeReceivedItems.push({ name: '', set: '', qty: 1, valueEach: 0 });
       renderTradeReceivedItems(receivedWrap); updateTradeTotalsDisplay();
     });
+    body.querySelector('#f_cashDir').addEventListener('change', updateTradeTotalsDisplay);
+    body.querySelector('#f_cashAmount').addEventListener('input', updateTradeTotalsDisplay);
     body.querySelector('#cancelBtn').addEventListener('click', closeModal);
 
     body.querySelector('#saveBtn').addEventListener('click', () => {
@@ -899,9 +1004,14 @@ function openTradeModal(trade) {
 
       const finalGiven = cleanGiven.map(li => {
         const inv = findInventory(li.inventoryId);
-        return { inventoryId: inv.id, name: inv.name, qty: num(li.qty), valueEach: num(li.valueEach) };
+        return { inventoryId: inv.id, name: inv.name, qty: num(li.qty), valueEach: num(li.valueEach), costEach: num(inv.costPerUnit) };
       });
       const finalReceived = cleanReceived.map(li => ({ name: li.name.trim(), set: (li.set || '').trim(), qty: num(li.qty), valueEach: num(li.valueEach) }));
+
+      // Carryover basis: spread the given cards' cost (± cash) across the received cards.
+      const { cashReceived, cashPaid } = readTradeCash();
+      const carry = computeTradeCarryover(finalGiven, finalReceived, cashReceived, cashPaid);
+      finalReceived.forEach((r, i) => { r.costEach = Math.round(carry.allocations[i].basisPerUnit * 100) / 100; });
 
       consumeInventory(finalGiven);
 
@@ -911,6 +1021,9 @@ function openTradeModal(trade) {
         partner: body.querySelector('#f_partner').value.trim(),
         given: finalGiven,
         received: finalReceived,
+        cashReceived, cashPaid,
+        carryoverBasis: Math.round(carry.totalNewBasis * 100) / 100,
+        realizedGain: Math.round(carry.realizedGain * 100) / 100,
         notes: body.querySelector('#f_notes').value.trim(),
       };
 
@@ -920,8 +1033,8 @@ function openTradeModal(trade) {
           DATA.inventory.push({
             id: genId(), category: 'Single Card', name: r.name, set: r.set, cardNumber: '',
             condition: 'NM', graded: false, gradingCompany: '', grade: '',
-            quantity: r.qty, costPerUnit: r.qty > 0 ? r.valueEach : 0, marketPerUnit: r.valueEach,
-            dateAcquired: record.date, source: 'Trade', notes: `Received in trade with ${record.partner || 'trade partner'}`,
+            quantity: r.qty, costPerUnit: r.costEach, marketPerUnit: r.valueEach,
+            dateAcquired: record.date, source: 'Trade', notes: `Received in trade with ${record.partner || 'trade partner'} (carryover basis)`,
           });
         }
       }
@@ -929,6 +1042,272 @@ function openTradeModal(trade) {
       if (isEdit) Object.assign(trade, record); else DATA.trades.push(record);
       saveData(); renderAll(); closeModal();
       showToast(isEdit ? 'Trade updated.' : 'Trade recorded.');
+    });
+  });
+}
+
+/* ===========================================================
+   BULK LOTS  (flat-fee lots; cost split equally per card)
+   =========================================================== */
+
+function findLot(id) { return DATA.lots.find(l => l.id === id); }
+function lotName(id) { const l = findLot(id); return l ? l.name : ''; }
+
+function lotPerCard(lot) {
+  const c = num(lot.cardCount);
+  return c > 0 ? num(lot.totalCost) / c : 0;
+}
+
+// Every card sold out of a lot, gathered from sales line items that reference it.
+function lotSoldItems(lot) {
+  const out = [];
+  for (const s of DATA.sales) {
+    for (const it of (s.items || [])) {
+      if (it.lotId === lot.id) {
+        out.push({ saleId: s.id, date: s.date, showId: s.showId, platform: s.platform,
+                   name: it.name, qty: num(it.qty), priceEach: num(it.priceEach), costEach: num(it.costEach) });
+      }
+    }
+  }
+  out.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  return out;
+}
+
+function lotStats(lot) {
+  const perCard = lotPerCard(lot);
+  const sold = lotSoldItems(lot);
+  const soldQty = sold.reduce((a, x) => a + x.qty, 0);
+  const remaining = num(lot.cardCount) - soldQty;
+  const revenue = sold.reduce((a, x) => a + x.qty * x.priceEach, 0);
+  const cogs = sold.reduce((a, x) => a + x.qty * x.costEach, 0);
+  return { perCard, sold, soldQty, remaining, revenue, cogs, profit: revenue - cogs, remainingCost: perCard * remaining };
+}
+
+function renderLots() {
+  const tbody = document.querySelector('#lotsTable tbody');
+  const rows = DATA.lots.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  tbody.innerHTML = '';
+  if (rows.length === 0) {
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="11">No bulk lots yet. Add one (e.g. 100 cards for $180) and the cost splits equally per card.</td></tr>`;
+    return;
+  }
+  for (const lot of rows) {
+    const st = lotStats(lot);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${esc(lot.date)}</td>
+      <td class="wrap">${esc(lot.name)}</td>
+      <td class="wrap">${esc(lot.vendor)}</td>
+      <td class="num">${money(lot.totalCost)}</td>
+      <td class="num">${money(st.perCard)}</td>
+      <td class="num">${num(lot.cardCount)}</td>
+      <td class="num">${st.soldQty}</td>
+      <td class="num">${st.remaining}</td>
+      <td class="num">${money(st.revenue)}</td>
+      <td class="num ${st.profit >= 0 ? 'pos' : 'neg'}">${money(st.profit)}</td>
+      <td><div class="row-actions">
+        <button class="btn primary small" data-act="open" data-id="${lot.id}">Open</button>
+        <button class="btn danger small" data-act="del" data-id="${lot.id}">Delete</button>
+      </div></td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+document.querySelector('#lotsTable tbody').addEventListener('click', e => {
+  const btn = e.target.closest('button'); if (!btn) return;
+  const lot = findLot(btn.dataset.id); if (!lot) return;
+  if (btn.dataset.act === 'open') openLotModal(lot);
+  if (btn.dataset.act === 'del') {
+    const st = lotStats(lot);
+    const warn = st.soldQty
+      ? `\n\n${st.soldQty} sold card(s) from this lot are recorded as sales. Those sales are kept, but will no longer link back to a lot.`
+      : '';
+    if (confirm(`Delete lot "${lot.name}"?${warn}`)) {
+      DATA.lots = DATA.lots.filter(l => l.id !== lot.id);
+      saveData(); renderAll(); showToast('Lot deleted.');
+    }
+  }
+});
+
+document.getElementById('lotsAddBtn').addEventListener('click', () => openLotEditModal(null));
+document.getElementById('lotsExportCsv').addEventListener('click', () => {
+  const rows = DATA.lots.map(l => ({ ...l, ...lotStats(l) }));
+  exportCsv('lots.csv', rows, [
+    { label: 'Date', get: r => r.date }, { label: 'Lot', get: r => r.name }, { label: 'Vendor', get: r => r.vendor },
+    { label: 'Total Cost', get: r => num(r.totalCost).toFixed(2) }, { label: 'Per Card', get: r => r.perCard.toFixed(2) },
+    { label: 'Cards', get: r => num(r.cardCount) }, { label: 'Sold', get: r => r.soldQty }, { label: 'Remaining', get: r => r.remaining },
+    { label: 'Revenue', get: r => r.revenue.toFixed(2) }, { label: 'COGS', get: r => r.cogs.toFixed(2) },
+    { label: 'Profit', get: r => r.profit.toFixed(2) }, { label: 'Notes', get: r => r.notes },
+  ]);
+});
+
+// Add / edit a lot's core fields.
+function openLotEditModal(lot) {
+  const isEdit = !!lot;
+  const v = lot || { name: '', date: todayISO(), vendor: '', totalCost: 0, cardCount: 0, notes: '' };
+  const html = `
+    <div class="form-grid">
+      <div class="field full"><label>Lot Name</label><input id="f_name" type="text" value="${esc(v.name)}" placeholder="e.g. Bulk box from card show"></div>
+      <div class="field"><label>Date</label><input id="f_date" type="date" value="${esc(v.date)}"></div>
+      <div class="field"><label>Vendor / Source</label><input id="f_vendor" type="text" value="${esc(v.vendor)}"></div>
+      <div class="field"><label>Total Cost ($)</label><input id="f_totalCost" type="number" min="0" step="0.01" value="${v.totalCost}"></div>
+      <div class="field"><label>Number of Cards</label><input id="f_cardCount" type="number" min="1" step="1" value="${v.cardCount}"></div>
+      <div class="field full"><div class="line-totals" id="perCardPreview" style="text-align:left;"></div></div>
+      <div class="field full"><label>Notes</label><textarea id="f_notes">${esc(v.notes)}</textarea></div>
+    </div>
+    <div class="form-actions">
+      <button class="btn secondary" id="cancelBtn">Cancel</button>
+      <button class="btn primary" id="saveBtn">${isEdit ? 'Save Changes' : 'Add Lot'}</button>
+    </div>`;
+  openModal(isEdit ? 'Edit Lot' : 'Add Bulk Lot', html, body => {
+    const preview = () => {
+      const tc = num(body.querySelector('#f_totalCost').value);
+      const cc = num(body.querySelector('#f_cardCount').value);
+      const pc = cc > 0 ? tc / cc : 0;
+      body.querySelector('#perCardPreview').innerHTML =
+        `Cost per card: <strong>${money(pc)}</strong>${cc > 0 ? ` &nbsp;(${money(tc)} ÷ ${cc} cards)` : ''}`;
+    };
+    preview();
+    body.querySelector('#f_totalCost').addEventListener('input', preview);
+    body.querySelector('#f_cardCount').addEventListener('input', preview);
+    body.querySelector('#cancelBtn').addEventListener('click', () => isEdit ? openLotModal(lot) : closeModal());
+    body.querySelector('#saveBtn').addEventListener('click', () => {
+      const name = body.querySelector('#f_name').value.trim();
+      if (!name) { alert('Please enter a lot name.'); return; }
+      const cardCount = num(body.querySelector('#f_cardCount').value);
+      if (cardCount < 1) { alert('Enter the number of cards (at least 1).'); return; }
+      if (isEdit) {
+        const soldQty = lotStats(lot).soldQty;
+        if (cardCount < soldQty) { alert(`You've already sold ${soldQty} card(s) from this lot, so the count can't drop below ${soldQty}.`); return; }
+      }
+      const record = {
+        id: isEdit ? lot.id : genId(),
+        name,
+        date: body.querySelector('#f_date').value || todayISO(),
+        vendor: body.querySelector('#f_vendor').value.trim(),
+        totalCost: num(body.querySelector('#f_totalCost').value),
+        cardCount,
+        notes: body.querySelector('#f_notes').value.trim(),
+      };
+      if (isEdit) Object.assign(lot, record); else DATA.lots.push(record);
+      saveData(); renderAll();
+      showToast(isEdit ? 'Lot updated.' : 'Lot added.');
+      if (isEdit) openLotModal(lot); else closeModal();
+    });
+  });
+}
+
+// Lot detail: stats, sold-card list, and the "Sell a Card" action.
+function openLotModal(lot) {
+  const st = lotStats(lot);
+  const soldRows = st.sold.length ? st.sold.map(x => `
+    <tr>
+      <td>${esc(x.date)}</td>
+      <td class="wrap">${x.name ? esc(x.name) : '<span class="muted">(unnamed)</span>'}</td>
+      <td class="num">${x.qty}</td>
+      <td class="num">${money(x.priceEach)}</td>
+      <td class="num ${(x.priceEach - x.costEach) >= 0 ? 'pos' : 'neg'}">${money((x.priceEach - x.costEach) * x.qty)}</td>
+      <td><button class="btn danger small" data-sale="${x.saleId}" data-name="${esc(x.name)}">Undo</button></td>
+    </tr>`).join('') : `<tr class="empty-row"><td colspan="6">No cards sold from this lot yet.</td></tr>`;
+
+  const html = `
+    <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin-bottom:14px;">
+      <div class="stat-card"><div class="label">Per Card</div><div class="value">${money(st.perCard)}</div><div class="sub">${money(lot.totalCost)} ÷ ${num(lot.cardCount)}</div></div>
+      <div class="stat-card"><div class="label">Remaining</div><div class="value">${st.remaining}</div><div class="sub">of ${num(lot.cardCount)} cards</div></div>
+      <div class="stat-card"><div class="label">Sold</div><div class="value">${st.soldQty}</div><div class="sub">${money(st.revenue)} revenue</div></div>
+      <div class="stat-card"><div class="label">Lot Profit</div><div class="value ${st.profit >= 0 ? 'pos' : 'neg'}">${money(st.profit)}</div><div class="sub">so far</div></div>
+    </div>
+    <div class="toolbar">
+      <button class="btn secondary small" id="editLotBtn">Edit Lot</button>
+      <span class="spacer"></span>
+      <button class="btn primary" id="sellCardBtn" ${st.remaining <= 0 ? 'disabled' : ''}>Sell a Card</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Date</th><th>Card</th><th class="num">Qty</th><th class="num">Price/Ea</th><th class="num">Profit</th><th></th></tr></thead>
+        <tbody id="lotSoldBody">${soldRows}</tbody>
+      </table>
+    </div>
+    ${st.remaining <= 0 ? `<p class="muted" style="margin-top:10px;">All cards in this lot are sold. 🎉</p>` : ''}
+    <div class="form-actions"><button class="btn secondary" id="closeLotBtn">Close</button></div>`;
+
+  openModal(`Lot — ${lot.name}`, html, body => {
+    body.querySelector('#closeLotBtn').addEventListener('click', closeModal);
+    body.querySelector('#editLotBtn').addEventListener('click', () => openLotEditModal(lot));
+    const sellBtn = body.querySelector('#sellCardBtn');
+    if (sellBtn) sellBtn.addEventListener('click', () => openSellFromLotModal(lot));
+    body.querySelector('#lotSoldBody').addEventListener('click', e => {
+      const btn = e.target.closest('button'); if (!btn) return;
+      const label = btn.dataset.name ? ` of "${btn.dataset.name}"` : '';
+      if (confirm(`Undo this sale${label}? The card(s) return to the lot as available and the sale is removed.`)) {
+        undoLotSale(btn.dataset.sale);
+        const fresh = findLot(lot.id);
+        if (fresh) openLotModal(fresh); else closeModal();
+      }
+    });
+  });
+}
+
+// Remove a sale that came from a lot (returns the card to the available pool).
+function undoLotSale(saleId) {
+  const s = DATA.sales.find(x => x.id === saleId);
+  if (!s) return;
+  releaseInventory(s.items); // no-op for pure lot lines; restores stock if the sale also held inventory items
+  DATA.sales = DATA.sales.filter(x => x.id !== saleId);
+  saveData(); renderAll(); showToast('Sale undone; card returned to lot.');
+}
+
+// Sell one (or several) cards out of a lot. Creates a normal Sale so totals/dashboard/shows stay accurate.
+function openSellFromLotModal(lot) {
+  const st = lotStats(lot);
+  const html = `
+    <p class="muted">Remaining in lot: <strong>${st.remaining}</strong> &nbsp;·&nbsp; Cost per card: <strong>${money(st.perCard)}</strong></p>
+    <div class="form-grid">
+      <div class="field full"><label>Card Name (what sold)</label><input id="f_name" type="text" placeholder="e.g. Pikachu VMAX — or 'bulk commons'"></div>
+      <div class="field"><label>Qty</label><input id="f_qty" type="number" min="1" step="1" value="1"></div>
+      <div class="field"><label>Sale Price / Ea</label><input id="f_price" type="number" min="0" step="0.01" value="0"></div>
+      <div class="field"><label>Date</label><input id="f_date" type="date" value="${todayISO()}"></div>
+      <div class="field"><label>Platform</label><select id="f_platform">${fieldOptions(PLATFORMS, 'Local/Card Show')}</select></div>
+      <div class="field full"><label>Show / Event</label><select id="f_showId">${showOptionsHtml('')}</select></div>
+      <div class="field full"><label>Buyer (optional)</label><input id="f_buyer" type="text"></div>
+      <div class="field full"><div class="line-totals" id="sellProfitPreview" style="text-align:left;"></div></div>
+    </div>
+    <div class="form-actions">
+      <button class="btn secondary" id="cancelSellBtn">Cancel</button>
+      <button class="btn primary" id="confirmSellBtn">Record Sale</button>
+    </div>`;
+  openModal(`Sell from — ${lot.name}`, html, body => {
+    const preview = () => {
+      const qty = num(body.querySelector('#f_qty').value);
+      const price = num(body.querySelector('#f_price').value);
+      const profit = (price - st.perCard) * qty;
+      body.querySelector('#sellProfitPreview').innerHTML =
+        `Revenue: <strong>${money(price * qty)}</strong> &nbsp; Cost: <strong>${money(st.perCard * qty)}</strong> &nbsp; Profit: <strong class="${profit >= 0 ? 'pos' : 'neg'}">${money(profit)}</strong>`;
+    };
+    preview();
+    body.querySelector('#f_qty').addEventListener('input', preview);
+    body.querySelector('#f_price').addEventListener('input', preview);
+    body.querySelector('#cancelSellBtn').addEventListener('click', () => openLotModal(lot));
+    body.querySelector('#confirmSellBtn').addEventListener('click', () => {
+      const qty = num(body.querySelector('#f_qty').value);
+      if (qty < 1) { alert('Quantity must be at least 1.'); return; }
+      const remaining = lotStats(lot).remaining;
+      if (qty > remaining) { alert(`Only ${remaining} card(s) remain in this lot.`); return; }
+      const sale = {
+        id: genId(),
+        date: body.querySelector('#f_date').value || todayISO(),
+        buyer: body.querySelector('#f_buyer').value.trim(),
+        platform: body.querySelector('#f_platform').value,
+        showId: body.querySelector('#f_showId').value,
+        items: [{ lotId: lot.id, lotName: lot.name, name: body.querySelector('#f_name').value.trim() || 'Card from lot',
+                  qty, priceEach: num(body.querySelector('#f_price').value), costEach: lotPerCard(lot) }],
+        fees: 0, shipping: 0,
+        notes: `Sold from lot: ${lot.name}`,
+      };
+      DATA.sales.push(sale);
+      saveData(); renderAll();
+      showToast('Card sold from lot.');
+      openLotModal(lot);
     });
   });
 }
@@ -1074,6 +1453,13 @@ function renderDashboard() {
   const invCost = DATA.inventory.reduce((s, i) => s + i.quantity * i.costPerUnit, 0);
   const invUnits = DATA.inventory.reduce((s, i) => s + i.quantity, 0);
 
+  // Unsold cards still sitting in bulk lots, valued at their split cost.
+  const lotRemainingCost = DATA.lots.reduce((s, l) => s + lotStats(l).remainingCost, 0);
+  const lotRemainingUnits = DATA.lots.reduce((s, l) => s + lotStats(l).remaining, 0);
+  const totalCostBasis = invCost + lotRemainingCost;
+  const totalMarketValue = invValue + lotRemainingCost; // bulk pile carried at cost
+  const totalUnits = invUnits + lotRemainingUnits;
+
   const salesData = DATA.sales.map(saleTotals);
   const revenue = salesData.reduce((s, x) => s + x.revenue, 0);
   const cogs = salesData.reduce((s, x) => s + x.cogs, 0);
@@ -1088,9 +1474,10 @@ function renderDashboard() {
   const netTradeValue = trades.reduce((s, x) => s + x.net, 0);
 
   const stats = [
-    { label: 'Inventory Units', value: invUnits.toLocaleString(), sub: `${DATA.inventory.length} unique items` },
-    { label: 'Inventory Cost Basis', value: money(invCost), sub: 'What you paid' },
-    { label: 'Inventory Market Value', value: money(invValue), sub: (invValue - invCost >= 0 ? '+' : '') + money(invValue - invCost) + ' unrealized' },
+    { label: 'Inventory Units', value: totalUnits.toLocaleString(), sub: `${DATA.inventory.length} items + ${lotRemainingUnits} in lots` },
+    { label: 'Inventory Cost Basis', value: money(totalCostBasis), sub: 'What you paid (incl. lots)' },
+    { label: 'Inventory Market Value', value: money(totalMarketValue), sub: (totalMarketValue - totalCostBasis >= 0 ? '+' : '') + money(totalMarketValue - totalCostBasis) + ' unrealized' },
+    { label: 'Bulk Lots (remaining)', value: lotRemainingUnits.toLocaleString() + ' cards', sub: money(lotRemainingCost) + ' at cost · ' + DATA.lots.length + ' lots' },
     { label: 'Total Sales Revenue', value: money(revenue), sub: `${DATA.sales.length} sales` },
     { label: 'Total COGS', value: money(cogs), sub: 'Cost of items sold' },
     { label: 'Sales Profit', value: money(salesProfit), sub: 'Revenue − COGS − fees/shipping', cls: salesProfit >= 0 ? 'pos' : 'neg' },
@@ -1199,6 +1586,7 @@ window.addEventListener('appinstalled', () => {
 function renderAll() {
   renderDashboard();
   renderInventory();
+  renderLots();
   renderShows();
   renderPurchases();
   renderSales();
