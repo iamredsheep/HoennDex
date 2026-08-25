@@ -7,6 +7,7 @@ const STORE_KEY = 'pkmnTcgTracker_v1';
 
 const CATEGORIES = ['Single Card', 'Graded Slabs'];
 const ERAS = ['Modern', 'Mid-Era', 'Vintage'];
+const LANGUAGES = ['ENG', 'JP', 'CN'];
 const CONDITIONS = ['NM', 'LP', 'MP', 'HP', 'DMG', 'Sealed'];
 const SOURCES = ['Purchased', 'Trade', 'Pulled/Opened', 'Other'];
 const PLATFORMS = ['eBay', 'TCGPlayer', 'Facebook/Marketplace', 'Whatnot', 'Local/Card Show', 'Other'];
@@ -190,7 +191,7 @@ function renderInventory() {
 
   tbody.innerHTML = '';
   if (rows.length === 0) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="13">No inventory items yet.</td></tr>`;
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="14">No inventory items yet.</td></tr>`;
     return;
   }
 
@@ -206,6 +207,7 @@ function renderInventory() {
       <td>${esc(item.category)}</td>
       <td>${esc(item.era || '')}</td>
       <td>${esc(item.set)}</td>
+      <td>${esc(item.language || '')}</td>
       <td>${conditionLabel}</td>
       <td class="num">${item.quantity}</td>
       <td class="num">${money(item.costPerUnit)}</td>
@@ -296,7 +298,7 @@ document.getElementById('invAddBtn').addEventListener('click', () => openInvento
 document.getElementById('invExportCsv').addEventListener('click', () => {
   exportCsv('inventory.csv', DATA.inventory, [
     { label: 'Name', get: r => r.name }, { label: 'Category', get: r => r.category },
-    { label: 'Era', get: r => r.era }, { label: 'Set', get: r => r.set }, { label: 'Card #', get: r => r.cardNumber },
+    { label: 'Era', get: r => r.era }, { label: 'Language', get: r => r.language }, { label: 'Set', get: r => r.set }, { label: 'Card #', get: r => r.cardNumber },
     { label: 'Condition', get: r => isSlab(r) ? '' : r.condition }, { label: 'Grading Co', get: r => r.gradingCompany },
     { label: 'Grade', get: r => r.grade }, { label: 'Quantity', get: r => r.quantity }, { label: 'Cost/Unit', get: r => r.costPerUnit },
     { label: 'Market/Unit', get: r => r.marketPerUnit }, { label: 'Date Acquired', get: r => r.dateAcquired },
@@ -307,7 +309,7 @@ document.getElementById('invExportCsv').addEventListener('click', () => {
 function openInventoryModal(item) {
   const isEdit = !!item;
   const v = item || {
-    category: 'Single Card', era: 'Modern', name: '', set: '', cardNumber: '', condition: 'NM',
+    category: 'Single Card', era: 'Modern', language: 'ENG', name: '', set: '', cardNumber: '', condition: 'NM',
     gradingCompany: 'PSA', grade: '', quantity: 1, costPerUnit: 0,
     marketPerUnit: 0, dateAcquired: todayISO(), source: 'Purchased', notes: ''
   };
@@ -327,6 +329,9 @@ function openInventoryModal(item) {
       <div class="field"><label>Set / Expansion</label><input id="f_set" type="text" value="${esc(v.set)}" placeholder="e.g. Obsidian Flames"></div>
       <div class="field"><label>Card #</label><input id="f_cardNumber" type="text" value="${esc(v.cardNumber)}" placeholder="e.g. 125/197"></div>
 
+      <div class="field"><label>Language</label>
+        <select id="f_language">${fieldOptions(LANGUAGES, LANGUAGES.includes(v.language) ? v.language : 'ENG')}</select>
+      </div>
       <div class="field"><label>Condition</label>
         <select id="f_condition">${fieldOptions(CONDITIONS, v.condition)}</select>
       </div>
@@ -368,6 +373,7 @@ function openInventoryModal(item) {
         id: isEdit ? item.id : genId(),
         category,
         era: body.querySelector('#f_era').value,
+        language: body.querySelector('#f_language').value,
         name,
         set: body.querySelector('#f_set').value.trim(),
         cardNumber: body.querySelector('#f_cardNumber').value.trim(),
