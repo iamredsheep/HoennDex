@@ -158,6 +158,15 @@ function switchTab(tab) {
   renderAll();
 }
 
+// Sub-tab navigation inside the Transactions tab (Purchases / Sales / Trades).
+document.querySelectorAll('#txnSubtabs .subtab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const st = btn.dataset.subtab;
+    document.querySelectorAll('#txnSubtabs .subtab-btn').forEach(b => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('#tab-transactions .subtab-panel').forEach(p => p.classList.toggle('active', p.id === 'sub-' + st));
+  });
+});
+
 /* ===========================================================
    INVENTORY
    =========================================================== */
@@ -170,69 +179,111 @@ function invTotals(item) {
 
 function isSlab(item) { return item.category === 'Graded Slabs' || item.graded; }
 
-function renderInventory() {
-  renderInventoryOverview();
-  const tbody = document.querySelector('#inventoryTable tbody');
-  const search = document.getElementById('invSearch').value.trim().toLowerCase();
-  const catFilter = document.getElementById('invCategoryFilter').value;
-  const eraFilter = document.getElementById('invEraFilter').value;
+function itemsOfCategory(cat) { return DATA.inventory.filter(i => (i.category || 'Single Card') === cat); }
 
-  let rows = DATA.inventory.filter(item => {
-    if (catFilter && item.category !== catFilter) return false;
-    if (eraFilter && (item.era || '') !== eraFilter) return false;
+// Shared search + era filter for an inventory subset, sorted by name.
+function invApplyFilters(items, searchId, eraId) {
+  const searchEl = document.getElementById(searchId);
+  const eraEl = document.getElementById(eraId);
+  const search = (searchEl ? searchEl.value : '').trim().toLowerCase();
+  const era = eraEl ? eraEl.value : '';
+  return items.filter(it => {
+    if (era && (it.era || '') !== era) return false;
     if (search) {
-      const hay = [item.name, item.set, item.cardNumber, item.notes].join(' ').toLowerCase();
+      const hay = [it.name, it.set, it.cardNumber, it.language, it.notes].join(' ').toLowerCase();
       if (!hay.includes(search)) return false;
     }
     return true;
-  });
+  }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+}
 
-  rows = rows.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+const rowActions = id => `
+      <td><div class="row-actions">
+        <button class="btn secondary small" data-act="edit" data-id="${id}">Edit</button>
+        <button class="btn danger small" data-act="del" data-id="${id}">Delete</button>
+      </div></td>`;
 
-  tbody.innerHTML = '';
-  if (rows.length === 0) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="14">No inventory items yet.</td></tr>`;
-    return;
-  }
-
-  for (const item of rows) {
+/* ---- Singles tab (category: Single Card) ---- */
+function renderSingles() {
+  renderOverviewInto('singlesOverview', itemsOfCategory('Single Card'), 'Singles Overview — Cost Basis by Era');
+  const rows = invApplyFilters(itemsOfCategory('Single Card'), 'singlesSearch', 'singlesEraFilter');
+  const tbody = document.querySelector('#singlesTable tbody');
+  if (!rows.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="13">No single cards yet.</td></tr>`; return; }
+  tbody.innerHTML = rows.map(item => {
     const { totalCost, totalMarket } = invTotals(item);
-    const conditionLabel = isSlab(item)
-      ? `${esc(item.gradingCompany || '')} ${esc(item.grade || '')} <span class="badge graded">SLAB</span>`
-      : esc(item.condition || '');
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
+    return `<tr>
       <td class="wrap sticky-col sticky-1">${esc(item.name)}</td>
       <td class="sticky-col sticky-2">${esc(item.cardNumber)}</td>
-      <td>${esc(item.category)}</td>
       <td>${esc(item.era || '')}</td>
       <td>${esc(item.set)}</td>
       <td>${esc(item.language || '')}</td>
-      <td>${conditionLabel}</td>
+      <td>${esc(item.condition || '')}</td>
       <td class="num">${item.quantity}</td>
       <td class="num">${money(item.costPerUnit)}</td>
       <td class="num">${money(item.marketPerUnit)}</td>
       <td class="num">${money(totalCost)}</td>
       <td class="num">${money(totalMarket)}</td>
-      <td>${esc(item.dateAcquired)}</td>
-      <td>
-        <div class="row-actions">
-          <button class="btn secondary small" data-act="edit" data-id="${item.id}">Edit</button>
-          <button class="btn danger small" data-act="del" data-id="${item.id}">Delete</button>
-        </div>
-      </td>`;
-    tbody.appendChild(tr);
-  }
+      <td>${esc(item.dateAcquired)}</td>${rowActions(item.id)}
+    </tr>`;
+  }).join('');
 }
 
-// Overview: cost basis (COGS on hand), market value, and unrealized P/L by era sub-category.
-function renderInventoryOverview() {
-  const el = document.getElementById('invOverview');
+/* ---- Slabs tab (category: Graded Slabs) ---- */
+function renderSlabs() {
+  renderOverviewInto('slabsOverview', itemsOfCategory('Graded Slabs'), 'Slabs Overview — Cost Basis by Era');
+  const rows = invApplyFilters(itemsOfCategory('Graded Slabs'), 'slabsSearch', 'slabsEraFilter');
+  const tbody = document.querySelector('#slabsTable tbody');
+  if (!rows.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="13">No graded slabs yet.</td></tr>`; return; }
+  tbody.innerHTML = rows.map(item => {
+    const { totalCost, totalMarket } = invTotals(item);
+    const grade = `${esc(item.gradingCompany || '')} ${esc(item.grade || '')}`.trim();
+    return `<tr>
+      <td class="wrap sticky-col sticky-1">${esc(item.name)}</td>
+      <td class="sticky-col sticky-2">${esc(item.cardNumber)}</td>
+      <td>${esc(item.era || '')}</td>
+      <td>${esc(item.set)}</td>
+      <td>${esc(item.language || '')}</td>
+      <td>${grade ? `<span class="badge graded">${grade}</span>` : '<span class="muted">—</span>'}</td>
+      <td class="num">${item.quantity}</td>
+      <td class="num">${money(item.costPerUnit)}</td>
+      <td class="num">${money(item.marketPerUnit)}</td>
+      <td class="num">${money(totalCost)}</td>
+      <td class="num">${money(totalMarket)}</td>
+      <td>${esc(item.dateAcquired)}</td>${rowActions(item.id)}
+    </tr>`;
+  }).join('');
+}
+
+/* ---- Binder tab (category: Binder — bulk low-cost cards by count + average cost) ---- */
+function renderBinder() {
+  renderOverviewInto('binderOverview', itemsOfCategory('Binder'), 'Binder Overview — Cost Basis by Era');
+  const rows = invApplyFilters(itemsOfCategory('Binder'), 'binderSearch', 'binderEraFilter');
+  const tbody = document.querySelector('#binderTable tbody');
+  if (!rows.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="10">No binder entries yet.</td></tr>`; return; }
+  tbody.innerHTML = rows.map(item => {
+    const { totalCost, totalMarket } = invTotals(item);
+    return `<tr>
+      <td class="wrap sticky-col">${esc(item.name)}</td>
+      <td>${esc(item.era || '')}</td>
+      <td>${esc(item.language || '')}</td>
+      <td class="num">${item.quantity}</td>
+      <td class="num">${money(item.costPerUnit)}</td>
+      <td class="num">${money(totalCost)}</td>
+      <td class="num">${money(item.marketPerUnit)}</td>
+      <td class="num">${money(totalMarket)}</td>
+      <td>${esc(item.dateAcquired)}</td>${rowActions(item.id)}
+    </tr>`;
+  }).join('');
+}
+
+// Overview: cost basis (COGS on hand), market value, and unrealized P/L by era, over a subset.
+function renderOverviewInto(containerId, items, title) {
+  const el = document.getElementById(containerId);
   if (!el) return;
   const keys = [...ERAS, 'Uncategorized'];
   const groups = {};
   keys.forEach(k => groups[k] = { items: 0, qty: 0, cost: 0, market: 0 });
-  for (const it of DATA.inventory) {
+  for (const it of items) {
     const key = ERAS.includes(it.era) ? it.era : 'Uncategorized';
     const g = groups[key];
     g.items++;
@@ -260,11 +311,11 @@ function renderInventoryOverview() {
 
   el.innerHTML = `
     <div class="card" style="margin-bottom:16px;">
-      <h2 style="margin-bottom:10px;">Inventory Overview — Cost Basis by Era</h2>
+      <h2 style="margin-bottom:10px;">${esc(title)}</h2>
       <div class="table-wrap" style="box-shadow:none;border:none;">
         <table class="overview-table">
           <thead><tr>
-            <th class="sticky-col">Category</th><th class="num">Items</th><th class="num">Qty</th>
+            <th class="sticky-col">Era</th><th class="num">Items</th><th class="num">Qty</th>
             <th class="num">Cost Basis</th><th class="num">Market Value</th><th class="num">Unrealized</th><th class="num">Margin</th>
           </tr></thead>
           <tbody>
@@ -276,76 +327,94 @@ function renderInventoryOverview() {
     </div>`;
 }
 
-document.querySelector('#inventoryTable tbody').addEventListener('click', e => {
-  const btn = e.target.closest('button');
-  if (!btn) return;
-  const item = findInventory(btn.dataset.id);
-  if (!item) return;
-  if (btn.dataset.act === 'edit') openInventoryModal(item);
-  if (btn.dataset.act === 'del') {
-    if (confirm(`Delete "${item.name}" from inventory? This cannot be undone.`)) {
-      DATA.inventory = DATA.inventory.filter(i => i.id !== item.id);
-      saveData(); renderAll();
-      showToast('Item deleted.');
+// Edit/Delete delegation for each inventory table.
+function wireInvTable(tableId) {
+  document.querySelector(`#${tableId} tbody`).addEventListener('click', e => {
+    const btn = e.target.closest('button'); if (!btn) return;
+    const item = findInventory(btn.dataset.id); if (!item) return;
+    if (btn.dataset.act === 'edit') openInventoryModal(item);
+    if (btn.dataset.act === 'del') {
+      if (confirm(`Delete "${item.name}"? This cannot be undone.`)) {
+        DATA.inventory = DATA.inventory.filter(i => i.id !== item.id);
+        saveData(); renderAll(); showToast('Deleted.');
+      }
     }
-  }
+  });
+}
+['singlesTable', 'slabsTable', 'binderTable'].forEach(wireInvTable);
+
+// Search + era filters per tab.
+[['singlesSearch', 'singlesEraFilter', renderSingles],
+ ['slabsSearch', 'slabsEraFilter', renderSlabs],
+ ['binderSearch', 'binderEraFilter', renderBinder]].forEach(([sId, eId, fn]) => {
+  document.getElementById(sId).addEventListener('input', fn);
+  document.getElementById(eId).addEventListener('change', fn);
 });
 
-document.getElementById('invSearch').addEventListener('input', renderInventory);
-document.getElementById('invCategoryFilter').addEventListener('change', renderInventory);
-document.getElementById('invEraFilter').addEventListener('change', renderInventory);
-document.getElementById('invAddBtn').addEventListener('click', () => openInventoryModal(null));
-document.getElementById('invExportCsv').addEventListener('click', () => {
-  exportCsv('inventory.csv', DATA.inventory, [
+// Add buttons — type is fixed by the tab (no Type dropdown in the modal).
+document.getElementById('singlesAddBtn').addEventListener('click', () => openInventoryModal(null, 'Single Card'));
+document.getElementById('slabsAddBtn').addEventListener('click', () => openInventoryModal(null, 'Graded Slabs'));
+document.getElementById('binderAddBtn').addEventListener('click', () => openInventoryModal(null, 'Binder'));
+
+// CSV export per tab.
+function exportInvCsv(filename, items) {
+  exportCsv(filename, items, [
     { label: 'Name', get: r => r.name }, { label: 'Category', get: r => r.category },
-    { label: 'Era', get: r => r.era }, { label: 'Language', get: r => r.language }, { label: 'Set', get: r => r.set }, { label: 'Card #', get: r => r.cardNumber },
+    { label: 'Era', get: r => r.era }, { label: 'Language', get: r => r.language },
+    { label: 'Set', get: r => r.set }, { label: 'Card #', get: r => r.cardNumber },
     { label: 'Condition', get: r => isSlab(r) ? '' : r.condition }, { label: 'Grading Co', get: r => r.gradingCompany },
     { label: 'Grade', get: r => r.grade }, { label: 'Quantity', get: r => r.quantity }, { label: 'Cost/Unit', get: r => r.costPerUnit },
     { label: 'Market/Unit', get: r => r.marketPerUnit }, { label: 'Date Acquired', get: r => r.dateAcquired },
     { label: 'Source', get: r => r.source }, { label: 'Notes', get: r => r.notes },
   ]);
-});
+}
+document.getElementById('singlesExportCsv').addEventListener('click', () => exportInvCsv('singles.csv', itemsOfCategory('Single Card')));
+document.getElementById('slabsExportCsv').addEventListener('click', () => exportInvCsv('slabs.csv', itemsOfCategory('Graded Slabs')));
+document.getElementById('binderExportCsv').addEventListener('click', () => exportInvCsv('binder.csv', itemsOfCategory('Binder')));
 
-function openInventoryModal(item) {
+// Add/edit modal. Type is fixed by `forcedCategory` (new) or the item's category (edit);
+// fields shown adapt to Single Card / Graded Slab / Binder.
+function openInventoryModal(item, forcedCategory) {
   const isEdit = !!item;
+  const category = isEdit ? (item.category || 'Single Card') : (forcedCategory || 'Single Card');
+  const isSlabCat = category === 'Graded Slabs';
+  const isBinder = category === 'Binder';
+  const typeLabel = isBinder ? 'Binder Entry' : (isSlabCat ? 'Graded Slab' : 'Single Card');
   const v = item || {
-    category: 'Single Card', era: 'Modern', language: 'ENG', name: '', set: '', cardNumber: '', condition: 'NM',
+    category, era: 'Modern', language: 'ENG', name: '', set: '', cardNumber: '', condition: 'NM',
     gradingCompany: 'PSA', grade: '', quantity: 1, costPerUnit: 0,
     marketPerUnit: 0, dateAcquired: todayISO(), source: 'Purchased', notes: ''
   };
-  const slabInit = v.category === 'Graded Slabs' || v.graded;
+
+  const nameLabel = isBinder ? 'Binder / Description' : 'Name';
+  const namePlaceholder = isBinder ? 'e.g. Modern bulk commons' : 'e.g. Charizard ex';
+  const qtyLabel = isBinder ? 'Number of Cards' : 'Quantity';
+  const costLabel = isBinder ? 'Average Cost / Card' : 'Cost / Unit';
+  const marketLabel = isBinder ? 'Average Market / Card' : 'Market Value / Unit';
+
+  const setBlock = isBinder ? '' : `
+      <div class="field"><label>Set / Expansion</label><input id="f_set" type="text" value="${esc(v.set)}" placeholder="e.g. Obsidian Flames"></div>
+      <div class="field"><label>Card #</label><input id="f_cardNumber" type="text" value="${esc(v.cardNumber)}" placeholder="e.g. 125/197"></div>`;
+  const conditionBlock = (isBinder || isSlabCat) ? '' : `
+      <div class="field"><label>Condition</label><select id="f_condition">${fieldOptions(CONDITIONS, v.condition)}</select></div>`;
+  const gradingBlock = isSlabCat ? `
+      <div class="field"><label>Grading Company</label><select id="f_gradingCompany">${fieldOptions(GRADING_COMPANIES, v.gradingCompany || 'PSA')}</select></div>
+      <div class="field"><label>Grade</label><input id="f_grade" type="text" value="${esc(v.grade)}" placeholder="e.g. 10"></div>` : '';
 
   const html = `
     <div class="form-grid">
-      <div class="field"><label>Type</label>
-        <select id="f_category">${fieldOptions(CATEGORIES, v.category)}</select>
-      </div>
-      <div class="field"><label>Era</label>
-        <select id="f_era">${fieldOptions(ERAS, ERAS.includes(v.era) ? v.era : 'Modern')}</select>
-      </div>
+      <div class="field"><label>Era</label><select id="f_era">${fieldOptions(ERAS, ERAS.includes(v.era) ? v.era : 'Modern')}</select></div>
+      <div class="field"><label>Language</label><select id="f_language">${fieldOptions(LANGUAGES, LANGUAGES.includes(v.language) ? v.language : 'ENG')}</select></div>
 
-      <div class="field full"><label>Name</label><input id="f_name" type="text" value="${esc(v.name)}" placeholder="e.g. Charizard ex"></div>
+      <div class="field full"><label>${nameLabel}</label><input id="f_name" type="text" value="${esc(v.name)}" placeholder="${namePlaceholder}"></div>
+      ${setBlock}
+      ${conditionBlock}
+      ${gradingBlock}
+      <div class="field"><label>${qtyLabel}</label><input id="f_quantity" type="number" min="0" step="1" value="${v.quantity}"></div>
+      ${(isBinder || isSlabCat) ? '<div class="field"></div>' : ''}
 
-      <div class="field"><label>Set / Expansion</label><input id="f_set" type="text" value="${esc(v.set)}" placeholder="e.g. Obsidian Flames"></div>
-      <div class="field"><label>Card #</label><input id="f_cardNumber" type="text" value="${esc(v.cardNumber)}" placeholder="e.g. 125/197"></div>
-
-      <div class="field"><label>Language</label>
-        <select id="f_language">${fieldOptions(LANGUAGES, LANGUAGES.includes(v.language) ? v.language : 'ENG')}</select>
-      </div>
-      <div class="field"><label>Condition</label>
-        <select id="f_condition">${fieldOptions(CONDITIONS, v.condition)}</select>
-      </div>
-      <div class="field"><label>Quantity</label><input id="f_quantity" type="number" min="0" step="1" value="${v.quantity}"></div>
-
-      <div class="field" id="wrap_gradingCompany" style="display:${slabInit ? 'block' : 'none'}"><label>Grading Company</label>
-        <select id="f_gradingCompany">${fieldOptions(GRADING_COMPANIES, v.gradingCompany || 'PSA')}</select>
-      </div>
-      <div class="field" id="wrap_grade" style="display:${slabInit ? 'block' : 'none'}"><label>Grade</label>
-        <input id="f_grade" type="text" value="${esc(v.grade)}" placeholder="e.g. 10">
-      </div>
-
-      <div class="field"><label>Cost / Unit</label><input id="f_costPerUnit" type="number" min="0" step="0.01" value="${v.costPerUnit}"></div>
-      <div class="field"><label>Market Value / Unit</label><input id="f_marketPerUnit" type="number" min="0" step="0.01" value="${v.marketPerUnit}"></div>
+      <div class="field"><label>${costLabel}</label><input id="f_costPerUnit" type="number" min="0" step="0.01" value="${v.costPerUnit}"></div>
+      <div class="field"><label>${marketLabel}</label><input id="f_marketPerUnit" type="number" min="0" step="0.01" value="${v.marketPerUnit}"></div>
 
       <div class="field"><label>Date Acquired</label><input id="f_dateAcquired" type="date" value="${esc(v.dateAcquired)}"></div>
       <div class="field"><label>Source</label><select id="f_source">${fieldOptions(SOURCES, v.source)}</select></div>
@@ -354,47 +423,37 @@ function openInventoryModal(item) {
     </div>
     <div class="form-actions">
       <button class="btn secondary" id="cancelBtn">Cancel</button>
-      <button class="btn primary" id="saveBtn">${isEdit ? 'Save Changes' : 'Add Item'}</button>
+      <button class="btn primary" id="saveBtn">${isEdit ? 'Save Changes' : 'Add ' + typeLabel}</button>
     </div>`;
 
-  openModal(isEdit ? 'Edit Inventory Item' : 'Add Inventory Item', html, body => {
-    const toggleGrading = () => {
-      const slab = body.querySelector('#f_category').value === 'Graded Slabs';
-      body.querySelector('#wrap_gradingCompany').style.display = slab ? 'block' : 'none';
-      body.querySelector('#wrap_grade').style.display = slab ? 'block' : 'none';
-    };
-    body.querySelector('#f_category').addEventListener('change', toggleGrading);
+  openModal(`${isEdit ? 'Edit' : 'Add'} ${typeLabel}`, html, body => {
+    const val = sel => { const el = body.querySelector(sel); return el ? el.value : ''; };
     body.querySelector('#cancelBtn').addEventListener('click', closeModal);
     body.querySelector('#saveBtn').addEventListener('click', () => {
       const name = body.querySelector('#f_name').value.trim();
-      if (!name) { alert('Please enter a name.'); return; }
-      const category = body.querySelector('#f_category').value;
+      if (!name) { alert(isBinder ? 'Please enter a binder name.' : 'Please enter a name.'); return; }
       const record = {
         id: isEdit ? item.id : genId(),
         category,
-        era: body.querySelector('#f_era').value,
-        language: body.querySelector('#f_language').value,
+        era: val('#f_era'),
+        language: val('#f_language'),
         name,
-        set: body.querySelector('#f_set').value.trim(),
-        cardNumber: body.querySelector('#f_cardNumber').value.trim(),
-        condition: body.querySelector('#f_condition').value,
-        graded: category === 'Graded Slabs',
-        gradingCompany: body.querySelector('#f_gradingCompany').value,
-        grade: body.querySelector('#f_grade').value.trim(),
-        quantity: num(body.querySelector('#f_quantity').value),
-        costPerUnit: num(body.querySelector('#f_costPerUnit').value),
-        marketPerUnit: num(body.querySelector('#f_marketPerUnit').value),
-        dateAcquired: body.querySelector('#f_dateAcquired').value || todayISO(),
-        source: body.querySelector('#f_source').value,
-        notes: body.querySelector('#f_notes').value.trim(),
+        set: val('#f_set').trim(),
+        cardNumber: val('#f_cardNumber').trim(),
+        condition: (isSlabCat || isBinder) ? '' : val('#f_condition'),
+        graded: isSlabCat,
+        gradingCompany: isSlabCat ? val('#f_gradingCompany') : '',
+        grade: isSlabCat ? val('#f_grade').trim() : '',
+        quantity: num(val('#f_quantity')),
+        costPerUnit: num(val('#f_costPerUnit')),
+        marketPerUnit: num(val('#f_marketPerUnit')),
+        dateAcquired: val('#f_dateAcquired') || todayISO(),
+        source: val('#f_source'),
+        notes: val('#f_notes').trim(),
       };
-      if (isEdit) {
-        Object.assign(item, record);
-      } else {
-        DATA.inventory.push(record);
-      }
+      if (isEdit) Object.assign(item, record); else DATA.inventory.push(record);
       saveData(); renderAll(); closeModal();
-      showToast(isEdit ? 'Item updated.' : 'Item added.');
+      showToast(isEdit ? 'Saved.' : 'Added.');
     });
   });
 }
@@ -1655,7 +1714,9 @@ window.addEventListener('appinstalled', () => {
 
 function renderAll() {
   renderDashboard();
-  renderInventory();
+  renderSingles();
+  renderSlabs();
+  renderBinder();
   renderLots();
   renderShows();
   renderPurchases();

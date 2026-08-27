@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon.svg">
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
 
@@ -30,12 +30,12 @@
 
 <nav class="tabs" id="tabNav">
   <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
-  <button class="tab-btn" data-tab="inventory">Inventory</button>
+  <button class="tab-btn" data-tab="singles">Singles</button>
+  <button class="tab-btn" data-tab="slabs">Slabs</button>
+  <button class="tab-btn" data-tab="binder">Binder</button>
   <button class="tab-btn" data-tab="lots">Lots</button>
   <button class="tab-btn" data-tab="shows">Shows</button>
-  <button class="tab-btn" data-tab="purchases">Purchases</button>
-  <button class="tab-btn" data-tab="sales">Sales</button>
-  <button class="tab-btn" data-tab="trades">Trades</button>
+  <button class="tab-btn" data-tab="transactions">Transactions</button>
   <button class="tab-btn" data-tab="expenses">Expenses</button>
   <button class="tab-btn" data-tab="backup">Backup</button>
 </nav>
@@ -57,33 +57,27 @@
     </div>
   </section>
 
-  <!-- INVENTORY -->
-  <section class="tab-panel" id="tab-inventory">
-    <div id="invOverview"></div>
+  <!-- SINGLES -->
+  <section class="tab-panel" id="tab-singles">
+    <div id="singlesOverview"></div>
     <div class="toolbar">
-      <input type="search" id="invSearch" placeholder="Search name, set, card #...">
-      <select id="invCategoryFilter">
-        <option value="">All Types</option>
-        <option value="Single Card">Single Card</option>
-        <option value="Graded Slabs">Graded Slabs</option>
-      </select>
-      <select id="invEraFilter">
+      <input type="search" id="singlesSearch" placeholder="Search name, set, #...">
+      <select id="singlesEraFilter">
         <option value="">All Eras</option>
         <option value="Modern">Modern</option>
         <option value="Mid-Era">Mid-Era</option>
         <option value="Vintage">Vintage</option>
       </select>
       <span class="spacer"></span>
-      <button class="btn secondary" id="invExportCsv">Export CSV</button>
-      <button class="btn primary" id="invAddBtn">+ Add Item</button>
+      <button class="btn secondary" id="singlesExportCsv">Export CSV</button>
+      <button class="btn primary" id="singlesAddBtn">+ Add Single</button>
     </div>
     <div class="table-wrap">
-      <table id="inventoryTable">
+      <table id="singlesTable" class="inv-table">
         <thead>
           <tr>
             <th class="sticky-col sticky-1">Name</th>
             <th class="sticky-col sticky-2">#</th>
-            <th>Type</th>
             <th>Era</th>
             <th>Set</th>
             <th>Lang</th>
@@ -92,6 +86,84 @@
             <th class="num">Cost/Ea</th>
             <th class="num">Market/Ea</th>
             <th class="num">Total Cost</th>
+            <th class="num">Total Market</th>
+            <th>Acquired</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- SLABS -->
+  <section class="tab-panel" id="tab-slabs">
+    <div id="slabsOverview"></div>
+    <div class="toolbar">
+      <input type="search" id="slabsSearch" placeholder="Search name, set, #...">
+      <select id="slabsEraFilter">
+        <option value="">All Eras</option>
+        <option value="Modern">Modern</option>
+        <option value="Mid-Era">Mid-Era</option>
+        <option value="Vintage">Vintage</option>
+      </select>
+      <span class="spacer"></span>
+      <button class="btn secondary" id="slabsExportCsv">Export CSV</button>
+      <button class="btn primary" id="slabsAddBtn">+ Add Slab</button>
+    </div>
+    <div class="table-wrap">
+      <table id="slabsTable" class="inv-table">
+        <thead>
+          <tr>
+            <th class="sticky-col sticky-1">Name</th>
+            <th class="sticky-col sticky-2">#</th>
+            <th>Era</th>
+            <th>Set</th>
+            <th>Lang</th>
+            <th>Grade</th>
+            <th class="num">Qty</th>
+            <th class="num">Cost/Ea</th>
+            <th class="num">Market/Ea</th>
+            <th class="num">Total Cost</th>
+            <th class="num">Total Market</th>
+            <th>Acquired</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- BINDER -->
+  <section class="tab-panel" id="tab-binder">
+    <div id="binderOverview"></div>
+    <div class="toolbar">
+      <input type="search" id="binderSearch" placeholder="Search binder...">
+      <select id="binderEraFilter">
+        <option value="">All Eras</option>
+        <option value="Modern">Modern</option>
+        <option value="Mid-Era">Mid-Era</option>
+        <option value="Vintage">Vintage</option>
+      </select>
+      <span class="spacer"></span>
+      <button class="btn secondary" id="binderExportCsv">Export CSV</button>
+      <button class="btn primary" id="binderAddBtn">+ Add Binder Entry</button>
+    </div>
+    <p class="muted" style="margin:-4px 0 12px;">
+      For lower-cost cards not worth keying in individually — track just the <strong>number of cards</strong> and the <strong>average cost</strong> per card.
+    </p>
+    <div class="table-wrap">
+      <table id="binderTable">
+        <thead>
+          <tr>
+            <th class="sticky-col">Binder / Description</th>
+            <th>Era</th>
+            <th>Lang</th>
+            <th class="num"># Cards</th>
+            <th class="num">Avg Cost</th>
+            <th class="num">Total Cost</th>
+            <th class="num">Avg Market</th>
             <th class="num">Total Market</th>
             <th>Acquired</th>
             <th></th>
@@ -154,54 +226,63 @@
     </p>
   </section>
 
-  <!-- PURCHASES -->
-  <section class="tab-panel" id="tab-purchases">
-    <div class="toolbar">
-      <span class="spacer"></span>
-      <button class="btn secondary" id="purExportCsv">Export CSV</button>
-      <button class="btn primary" id="purAddBtn">+ Add Purchase</button>
-    </div>
-    <div class="table-wrap">
-      <table id="purchasesTable">
-        <thead>
-          <tr><th>Date</th><th>Vendor</th><th>Category</th><th>Description</th><th>Amount</th><th>Notes</th><th></th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </section>
+  <!-- TRANSACTIONS (Purchases / Sales / Trades) -->
+  <section class="tab-panel" id="tab-transactions">
+    <nav class="subtabs" id="txnSubtabs">
+      <button class="subtab-btn active" data-subtab="purchases">Purchases</button>
+      <button class="subtab-btn" data-subtab="sales">Sales</button>
+      <button class="subtab-btn" data-subtab="trades">Trades</button>
+    </nav>
 
-  <!-- SALES -->
-  <section class="tab-panel" id="tab-sales">
-    <div class="toolbar">
-      <span class="spacer"></span>
-      <button class="btn secondary" id="salesExportCsv">Export CSV</button>
-      <button class="btn primary" id="salesAddBtn">+ New Sale</button>
+    <!-- Purchases sub-panel -->
+    <div class="subtab-panel active" id="sub-purchases">
+      <div class="toolbar">
+        <span class="spacer"></span>
+        <button class="btn secondary" id="purExportCsv">Export CSV</button>
+        <button class="btn primary" id="purAddBtn">+ Add Purchase</button>
+      </div>
+      <div class="table-wrap">
+        <table id="purchasesTable">
+          <thead>
+            <tr><th>Date</th><th>Vendor</th><th>Category</th><th>Description</th><th>Amount</th><th>Notes</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
-    <div class="table-wrap">
-      <table id="salesTable">
-        <thead>
-          <tr><th>Date</th><th>Buyer</th><th>Platform</th><th>Items</th><th>Revenue</th><th>Fees</th><th>Shipping</th><th>COGS</th><th>Net Profit</th><th></th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </section>
 
-  <!-- TRADES -->
-  <section class="tab-panel" id="tab-trades">
-    <div class="toolbar">
-      <span class="spacer"></span>
-      <button class="btn secondary" id="tradesExportCsv">Export CSV</button>
-      <button class="btn primary" id="tradesAddBtn">+ New Trade</button>
+    <!-- Sales sub-panel -->
+    <div class="subtab-panel" id="sub-sales">
+      <div class="toolbar">
+        <span class="spacer"></span>
+        <button class="btn secondary" id="salesExportCsv">Export CSV</button>
+        <button class="btn primary" id="salesAddBtn">+ New Sale</button>
+      </div>
+      <div class="table-wrap">
+        <table id="salesTable">
+          <thead>
+            <tr><th>Date</th><th>Buyer</th><th>Platform</th><th>Items</th><th>Revenue</th><th>Fees</th><th>Shipping</th><th>COGS</th><th>Net Profit</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
-    <div class="table-wrap">
-      <table id="tradesTable">
-        <thead>
-          <tr><th>Date</th><th>Partner</th><th>Given</th><th class="num">Given Value</th><th>Received</th><th class="num">Received Value</th><th class="num">Cash</th><th class="num">Net</th><th></th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+
+    <!-- Trades sub-panel -->
+    <div class="subtab-panel" id="sub-trades">
+      <div class="toolbar">
+        <span class="spacer"></span>
+        <button class="btn secondary" id="tradesExportCsv">Export CSV</button>
+        <button class="btn primary" id="tradesAddBtn">+ New Trade</button>
+      </div>
+      <div class="table-wrap">
+        <table id="tradesTable">
+          <thead>
+            <tr><th>Date</th><th>Partner</th><th>Given</th><th class="num">Given Value</th><th>Received</th><th class="num">Received Value</th><th class="num">Cash</th><th class="num">Net</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
   </section>
 
@@ -256,7 +337,7 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="app.js?v=7"></script>
+<script src="app.js?v=9"></script>
 <script>
   // Register the service worker for offline use + installability.
   if ('serviceWorker' in navigator) {
