@@ -18,7 +18,7 @@ const GRADING_COMPANIES = ['PSA', 'CGC', 'BGS', 'SGC', 'Other'];
 /* ---------------- Data store ---------------- */
 
 function defaultData() {
-  return { inventory: [], lots: [], shows: [], purchases: [], sales: [], trades: [], expenses: [] };
+  return { inventory: [], lots: [], shows: [], purchases: [], sales: [], trades: [], expenses: [], finance: { cashOnHand: 0, bank: 0 } };
 }
 
 let DATA = loadData();
@@ -255,8 +255,24 @@ function renderSlabs() {
 }
 
 /* ---- Binder tab (category: Binder — bulk low-cost cards by count + average cost) ---- */
+function renderBinderSummary(items) {
+  const el = document.getElementById('binderOverview');
+  if (!el) return;
+  const binders = items.length;
+  const cards = items.reduce((s, i) => s + num(i.quantity), 0);
+  const cost = items.reduce((s, i) => s + num(i.quantity) * num(i.costPerUnit), 0);
+  const market = items.reduce((s, i) => s + num(i.quantity) * num(i.marketPerUnit), 0);
+  el.innerHTML = `
+    <div class="stat-grid" style="margin-bottom:16px;">
+      <div class="stat-card"><div class="label">Binders</div><div class="value">${binders}</div><div class="sub">${binders === 1 ? 'entry' : 'entries'}</div></div>
+      <div class="stat-card"><div class="label">Total Cards</div><div class="value">${cards.toLocaleString()}</div><div class="sub">across all binders</div></div>
+      <div class="stat-card"><div class="label">Cost Basis</div><div class="value">${money(cost)}</div><div class="sub">what you paid</div></div>
+      <div class="stat-card"><div class="label">Market Value</div><div class="value">${money(market)}</div><div class="sub">${(market - cost >= 0 ? '+' : '') + money(market - cost)} unrealized</div></div>
+    </div>`;
+}
+
 function renderBinder() {
-  renderOverviewInto('binderOverview', itemsOfCategory('Binder'), 'Binder Overview — Cost Basis by Era');
+  renderBinderSummary(itemsOfCategory('Binder'));
   const rows = invApplyFilters(itemsOfCategory('Binder'), 'binderSearch', 'binderEraFilter');
   const tbody = document.querySelector('#binderTable tbody');
   if (!rows.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="10">No binder entries yet.</td></tr>`; return; }
@@ -271,9 +287,65 @@ function renderBinder() {
       <td class="num">${money(totalCost)}</td>
       <td class="num">${money(item.marketPerUnit)}</td>
       <td class="num">${money(totalMarket)}</td>
-      <td>${esc(item.dateAcquired)}</td>${rowActions(item.id)}
+      <td>${esc(item.dateAcquired)}</td>
+      <td><div class="row-actions">
+        <button class="btn primary small" data-act="cards" data-id="${item.id}">Cards (${(item.cards || []).length})</button>
+        <button class="btn secondary small" data-act="edit" data-id="${item.id}">Edit</button>
+        <button class="btn danger small" data-act="del" data-id="${item.id}">Delete</button>
+      </div></td>
     </tr>`;
   }).join('');
+}
+
+// Catalog of individual cards inside a binder (lightweight: name, number, set only).
+function openBinderModal(binder) {
+  if (!binder.cards) binder.cards = [];
+  const cards = binder.cards;
+  const cardRows = cards.length ? cards.map(c => `
+    <tr>
+      <td class="wrap">${esc(c.name)}</td>
+      <td>${esc(c.cardNumber)}</td>
+      <td>${esc(c.set)}</td>
+      <td><button class="btn danger small" data-card="${c.id}">Remove</button></td>
+    </tr>`).join('') : `<tr class="empty-row"><td colspan="4">No cards catalogued yet.</td></tr>`;
+
+  const html = `
+    <p class="muted">Bulk count: <strong>${num(binder.quantity)}</strong> cards &nbsp;·&nbsp; Avg cost ${money(binder.costPerUnit)} &nbsp;·&nbsp; Catalogued: <strong>${cards.length}</strong></p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Pokémon Name</th><th>Card #</th><th>Set</th><th></th></tr></thead>
+        <tbody id="binderCardBody">${cardRows}</tbody>
+      </table>
+    </div>
+    <h3>Add a card</h3>
+    <div class="form-grid">
+      <div class="field full"><label>Pokémon Name</label><input id="bc_name" type="text" placeholder="e.g. Pikachu"></div>
+      <div class="field"><label>Card #</label><input id="bc_num" type="text" placeholder="e.g. 58/102"></div>
+      <div class="field"><label>Set</label><input id="bc_set" type="text" placeholder="e.g. Base Set"></div>
+    </div>
+    <div class="form-actions">
+      <button class="btn secondary" id="closeBinderBtn">Close</button>
+      <button class="btn primary" id="bc_add">+ Add Card</button>
+    </div>`;
+
+  openModal(`Binder — ${binder.name}`, html, body => {
+    body.querySelector('#closeBinderBtn').addEventListener('click', closeModal);
+    body.querySelector('#bc_add').addEventListener('click', () => {
+      const name = body.querySelector('#bc_name').value.trim();
+      if (!name) { alert('Enter a Pokémon name.'); return; }
+      binder.cards.push({
+        id: genId(), name,
+        cardNumber: body.querySelector('#bc_num').value.trim(),
+        set: body.querySelector('#bc_set').value.trim(),
+      });
+      saveData(); renderAll(); openBinderModal(binder); // refresh
+    });
+    body.querySelector('#binderCardBody').addEventListener('click', e => {
+      const btn = e.target.closest('button'); if (!btn) return;
+      binder.cards = binder.cards.filter(c => c.id !== btn.dataset.card);
+      saveData(); renderAll(); openBinderModal(binder);
+    });
+  });
 }
 
 // Overview: cost basis (COGS on hand), market value, and unrealized P/L by era, over a subset.
@@ -332,6 +404,7 @@ function wireInvTable(tableId) {
   document.querySelector(`#${tableId} tbody`).addEventListener('click', e => {
     const btn = e.target.closest('button'); if (!btn) return;
     const item = findInventory(btn.dataset.id); if (!item) return;
+    if (btn.dataset.act === 'cards') openBinderModal(item);
     if (btn.dataset.act === 'edit') openInventoryModal(item);
     if (btn.dataset.act === 'del') {
       if (confirm(`Delete "${item.name}"? This cannot be undone.`)) {
@@ -626,14 +699,35 @@ function openExpenseModal(x) {
 let saleLineItems = [];
 let editingSaleId = null;
 
+// Return sold units to stock. Binder-card lines restore the binder count and re-file the card.
 function releaseInventory(items) {
   for (const it of items) {
+    if (it.binderId) {
+      const b = findInventory(it.binderId);
+      if (b) {
+        b.quantity = num(b.quantity) + num(it.qty);
+        if (it.binderCardId && it.cardSnapshot) {
+          if (!b.cards) b.cards = [];
+          if (!b.cards.some(c => c.id === it.binderCardId)) b.cards.push({ id: it.binderCardId, ...it.cardSnapshot });
+        }
+      }
+      continue;
+    }
     const inv = findInventory(it.inventoryId);
     if (inv) inv.quantity += it.qty;
   }
 }
+// Remove sold units from stock. Binder-card lines drop the binder count and pull the card out.
 function consumeInventory(items) {
   for (const it of items) {
+    if (it.binderId) {
+      const b = findInventory(it.binderId);
+      if (b) {
+        b.quantity = num(b.quantity) - num(it.qty);
+        if (it.binderCardId && b.cards) b.cards = b.cards.filter(c => c.id !== it.binderCardId);
+      }
+      continue;
+    }
     const inv = findInventory(it.inventoryId);
     if (inv) inv.quantity -= it.qty;
   }
@@ -708,6 +802,91 @@ function inventoryOptionsHtml(selectedId) {
   return `<option value="">Select item…</option>` + opts;
 }
 
+// A sale line can point at a normal inventory item (value = id) or a specific
+// card catalogued inside a binder (value = "bcard:<binderId>:<cardId>").
+function parseSaleSel(val) {
+  if (typeof val === 'string' && val.startsWith('bcard:')) {
+    const parts = val.split(':');
+    return { type: 'bcard', binderId: parts[1], cardId: parts[2] };
+  }
+  return { type: 'inv', inventoryId: val };
+}
+
+function saleSelAvail(val) {
+  const p = parseSaleSel(val);
+  if (p.type === 'bcard') return 1;
+  return availableQty(val);
+}
+
+// Options for the sale item picker: Singles & Slabs individually, then one entry per
+// binder (value "binderpick:<id>") that opens a card-selection window.
+function saleItemOptionsHtml(selectedValue) {
+  const singles = DATA.inventory
+    .filter(i => i.category === 'Single Card' || i.category === 'Graded Slabs')
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(i => `<option value="${i.id}" ${i.id === selectedValue ? 'selected' : ''}>${esc(i.name)}${i.cardNumber ? ' #' + esc(i.cardNumber) : ''} — ${esc(i.set || '')} [${i.quantity} in stock]</option>`)
+    .join('');
+  const binderOpts = DATA.inventory
+    .filter(i => i.category === 'Binder')
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(b => `<option value="binderpick:${b.id}">${esc(b.name)} — ${num(b.quantity)} cards${(b.cards || []).length ? ` (${(b.cards || []).length} listed)` : ''}…</option>`)
+    .join('');
+  return `<option value="">Select item…</option>`
+    + (singles ? `<optgroup label="Singles &amp; Slabs">${singles}</optgroup>` : '')
+    + (binderOpts ? `<optgroup label="Binders (pick cards)">${binderOpts}</optgroup>` : '');
+}
+
+// Nested modal: pick several catalogued cards (and/or a bulk quantity) from a binder.
+function openBinderCardPicker(binder, onConfirm, onCancel) {
+  const cards = binder.cards || [];
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay open';
+  overlay.style.zIndex = '300';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:560px;">
+      <div class="modal-header">
+        <h2>Select cards — ${esc(binder.name)}</h2>
+        <button class="modal-close" data-cancel>&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted">Avg cost ${money(binder.costPerUnit)} · ${num(binder.quantity)} in binder · ${cards.length} catalogued</p>
+        ${cards.length ? `
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th style="width:34px"><input type="checkbox" id="pickAll"></th><th>Pokémon</th><th>#</th><th>Set</th></tr></thead>
+            <tbody>
+              ${cards.map(c => `<tr>
+                <td><input type="checkbox" class="pick" value="${c.id}"></td>
+                <td class="wrap">${esc(c.name)}</td><td>${esc(c.cardNumber)}</td><td>${esc(c.set)}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>` : `<p class="muted">No cards catalogued in this binder yet — add them under the Binder tab, or just sell in bulk below.</p>`}
+        <div class="field" style="max-width:280px;margin-top:12px;">
+          <label>Also sell bulk / unlisted cards (qty)</label>
+          <input type="number" id="pickBulkQty" min="0" step="1" value="0">
+        </div>
+        <div class="form-actions">
+          <button class="btn secondary" data-cancel>Cancel</button>
+          <button class="btn primary" data-confirm>Add to sale</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const cleanup = () => overlay.remove();
+  const cancel = () => { cleanup(); if (onCancel) onCancel(); };
+  overlay.addEventListener('click', e => { if (e.target === overlay) cancel(); });
+  overlay.querySelectorAll('[data-cancel]').forEach(b => b.addEventListener('click', cancel));
+  const pickAll = overlay.querySelector('#pickAll');
+  if (pickAll) pickAll.addEventListener('change', e => overlay.querySelectorAll('.pick').forEach(c => { c.checked = e.target.checked; }));
+  overlay.querySelector('[data-confirm]').addEventListener('click', () => {
+    const ids = [...overlay.querySelectorAll('.pick:checked')].map(c => c.value);
+    const bulkQty = num(overlay.querySelector('#pickBulkQty').value);
+    cleanup();
+    onConfirm(ids, bulkQty);
+  });
+}
+
 function renderSaleLineItems(container) {
   container.innerHTML = saleLineItems.map((li, idx) => {
     if (li.lotId) {
@@ -722,14 +901,31 @@ function renderSaleLineItems(container) {
       <button class="line-item-remove" title="Remove line">&times;</button>
     </div>`;
     }
+    if (li.binderId) {
+      // Binder line: a specific catalogued card (qty locked to 1) or a bulk quantity.
+      const bname = esc(lotOrBinderName(li.binderId));
+      const isCard = !!li.binderCardId;
+      const label = isCard ? `${bname}: ${esc(li.name || 'card')}` : `${bname} (bulk)`;
+      const qtyCell = isCard
+        ? `<input type="text" value="1" disabled>`
+        : `<input class="li-qty" type="number" min="1" step="1" value="${li.qty}">`;
+      return `
+    <div class="line-item-row" data-idx="${idx}">
+      <div class="field"><label>${isCard ? 'Card (from binder)' : 'Binder (bulk)'}</label><input type="text" value="${label}" disabled></div>
+      <div class="field"><label>Qty</label>${qtyCell}</div>
+      <div class="field"><label>Price/Ea</label><input class="li-price" type="number" min="0" step="0.01" value="${li.priceEach}"></div>
+      <div class="field"><label>Cost/Ea</label><input type="text" value="${money(li.costEach)}" disabled></div>
+      <button class="line-item-remove" title="Remove line">&times;</button>
+    </div>`;
+    }
     return `
     <div class="line-item-row" data-idx="${idx}">
       <div class="field"><label>Item</label>
-        <select class="li-item">${inventoryOptionsHtml(li.inventoryId)}</select>
+        <select class="li-item">${saleItemOptionsHtml(li.inventoryId)}</select>
       </div>
       <div class="field"><label>Qty</label><input class="li-qty" type="number" min="1" step="1" value="${li.qty}"></div>
       <div class="field"><label>Price/Ea</label><input class="li-price" type="number" min="0" step="0.01" value="${li.priceEach}"></div>
-      <div class="field"><label>Avail.</label><input type="text" value="${availableQty(li.inventoryId)}" disabled></div>
+      <div class="field"><label>Avail.</label><input type="text" value="${saleSelAvail(li.inventoryId)}" disabled></div>
       <button class="line-item-remove" title="Remove line">&times;</button>
     </div>`;
   }).join('') || `<p class="muted">No items added yet.</p>`;
@@ -739,9 +935,41 @@ function renderSaleLineItems(container) {
     const itemSelect = row.querySelector('.li-item');
     if (itemSelect) {
       itemSelect.addEventListener('change', e => {
-        saleLineItems[idx].inventoryId = e.target.value;
-        const inv = findInventory(e.target.value);
-        if (inv) saleLineItems[idx].priceEach = inv.marketPerUnit;
+        const val = e.target.value;
+        if (val.startsWith('binderpick:')) {
+          const binder = findInventory(val.split(':')[1]);
+          if (!binder) return;
+          openBinderCardPicker(binder, (cardIds, bulkQty) => {
+            const newLines = [];
+            for (const cid of cardIds) {
+              const card = ((binder.cards) || []).find(c => c.id === cid) || {};
+              newLines.push({
+                binderId: binder.id, binderCardId: cid, inventoryId: '',
+                cardSnapshot: { name: card.name || '', cardNumber: card.cardNumber || '', set: card.set || '' },
+                name: card.name || 'Binder card', qty: 1,
+                priceEach: num(binder.marketPerUnit), costEach: num(binder.costPerUnit),
+              });
+            }
+            if (bulkQty > 0) {
+              newLines.push({
+                binderId: binder.id, inventoryId: '', name: binder.name + ' (bulk)', qty: bulkQty,
+                priceEach: num(binder.marketPerUnit), costEach: num(binder.costPerUnit),
+              });
+            }
+            if (newLines.length) saleLineItems.splice(idx, 1, ...newLines);
+            else saleLineItems[idx].inventoryId = '';
+            renderSaleLineItems(container);
+            updateSaleTotalsDisplay();
+          }, () => {
+            saleLineItems[idx].inventoryId = '';
+            renderSaleLineItems(container);
+          });
+          return;
+        }
+        const li = saleLineItems[idx];
+        li.inventoryId = val; li.binderId = undefined; li.binderCardId = undefined;
+        const inv = findInventory(val);
+        if (inv) li.priceEach = inv.marketPerUnit;
         renderSaleLineItems(container);
         updateSaleTotalsDisplay();
       });
@@ -750,9 +978,10 @@ function renderSaleLineItems(container) {
     if (nameInput) {
       nameInput.addEventListener('input', e => { saleLineItems[idx].name = e.target.value; });
     }
-    row.querySelector('.li-qty').addEventListener('input', e => {
-      saleLineItems[idx].qty = num(e.target.value); updateSaleTotalsDisplay();
-    });
+    const qtyInput = row.querySelector('.li-qty');
+    if (qtyInput) {
+      qtyInput.addEventListener('input', e => { saleLineItems[idx].qty = num(e.target.value); updateSaleTotalsDisplay(); });
+    }
     row.querySelector('.li-price').addEventListener('input', e => {
       saleLineItems[idx].priceEach = num(e.target.value); updateSaleTotalsDisplay();
     });
@@ -762,6 +991,9 @@ function renderSaleLineItems(container) {
   });
 }
 
+// Name lookup that works for both lots and binders (both live in different stores).
+function lotOrBinderName(id) { const inv = findInventory(id); return inv ? inv.name : ''; }
+
 function updateSaleTotalsDisplay() {
   const el = document.getElementById('saleTotalsDisplay');
   if (!el) return;
@@ -769,7 +1001,7 @@ function updateSaleTotalsDisplay() {
   const fees = num(document.getElementById('f_fees').value);
   const shipping = num(document.getElementById('f_shipping').value);
   const cogs = saleLineItems.reduce((s, li) => {
-    if (li.lotId) return s + num(li.costEach) * num(li.qty);
+    if (li.lotId || li.binderId) return s + num(li.costEach) * num(li.qty);
     const inv = findInventory(li.inventoryId);
     return s + (inv ? inv.costPerUnit * num(li.qty) : 0);
   }, 0);
@@ -820,7 +1052,7 @@ function openSaleModal(sale) {
     body.querySelector('#cancelBtn').addEventListener('click', closeModal);
 
     body.querySelector('#saveBtn').addEventListener('click', () => {
-      const cleanItems = saleLineItems.filter(i => (i.inventoryId || i.lotId) && num(i.qty) > 0);
+      const cleanItems = saleLineItems.filter(i => (i.inventoryId || i.lotId || i.binderId) && num(i.qty) > 0);
       if (cleanItems.length === 0) { alert('Add at least one item with a valid quantity.'); return; }
 
       // Temporarily release stock held by the original sale (if editing) so validation reflects true availability
@@ -828,6 +1060,13 @@ function openSaleModal(sale) {
 
       for (const li of cleanItems) {
         if (li.lotId) continue; // lot lines draw from a bulk pile, not tracked inventory stock
+        if (li.binderId) {
+          const b = findInventory(li.binderId);
+          if (!b) { alert('A binder in this sale no longer exists.'); if (isEdit) consumeInventory(sale.items); return; }
+          const need = li.binderCardId ? 1 : num(li.qty);
+          if (num(b.quantity) < need) { alert(`Not enough cards left in binder "${b.name}". Available: ${b.quantity}.`); if (isEdit) consumeInventory(sale.items); return; }
+          continue;
+        }
         const inv = findInventory(li.inventoryId);
         if (!inv) { alert('An item in this sale no longer exists in inventory.'); if (isEdit) consumeInventory(sale.items); return; }
         if (num(li.qty) > inv.quantity) {
@@ -842,6 +1081,18 @@ function openSaleModal(sale) {
           const lot = findLot(li.lotId);
           return { lotId: li.lotId, lotName: lot ? lot.name : (li.lotName || ''), name: (li.name || '').trim() || 'Card from lot',
                    qty: num(li.qty), priceEach: num(li.priceEach), costEach: lot ? lotPerCard(lot) : num(li.costEach) };
+        }
+        if (li.binderId) {
+          const b = findInventory(li.binderId);
+          if (li.binderCardId) {
+            const card = ((b && b.cards) || []).find(c => c.id === li.binderCardId) || {};
+            const snap = li.cardSnapshot || { name: card.name || li.name || 'Binder card', cardNumber: card.cardNumber || '', set: card.set || '' };
+            return { binderId: li.binderId, binderCardId: li.binderCardId, cardSnapshot: snap,
+                     name: snap.name || 'Binder card', qty: 1,
+                     priceEach: num(li.priceEach), costEach: b ? num(b.costPerUnit) : num(li.costEach) };
+          }
+          return { binderId: li.binderId, name: (b ? b.name : 'Binder') + ' (bulk)', qty: num(li.qty),
+                   priceEach: num(li.priceEach), costEach: b ? num(b.costPerUnit) : num(li.costEach) };
         }
         const inv = findInventory(li.inventoryId);
         return { inventoryId: inv.id, name: inv.name, qty: num(li.qty), priceEach: num(li.priceEach), costEach: inv.costPerUnit };
@@ -1712,6 +1963,51 @@ window.addEventListener('appinstalled', () => {
   showToast('HoennDex installed. Open it from your home screen.');
 });
 
+/* ===========================================================
+   FINANCE  (cash on hand + bank − expenses = available cashflow)
+   =========================================================== */
+
+function renderFinance() {
+  const f = DATA.finance || (DATA.finance = { cashOnHand: 0, bank: 0 });
+  const cash = num(f.cashOnHand);
+  const bank = num(f.bank);
+  const onHand = cash + bank;
+  const totalExpenses = DATA.expenses.reduce((s, x) => s + num(x.amount), 0);
+  const available = onHand - totalExpenses;
+
+  // Keep inputs in sync without clobbering what the user is currently typing.
+  const cashEl = document.getElementById('finCash');
+  const bankEl = document.getElementById('finBank');
+  if (cashEl && document.activeElement !== cashEl) cashEl.value = cash;
+  if (bankEl && document.activeElement !== bankEl) bankEl.value = bank;
+
+  const stats = [
+    { label: 'Cash on Hand', value: money(cash) },
+    { label: 'Bank Balance', value: money(bank) },
+    { label: 'Total On Hand', value: money(onHand), sub: 'Cash + Bank' },
+    { label: 'Total Expenses', value: money(totalExpenses), sub: `${DATA.expenses.length} ${DATA.expenses.length === 1 ? 'entry' : 'entries'}` },
+    { label: 'Available Cashflow', value: money(available), sub: 'On hand − expenses', cls: available >= 0 ? 'pos' : 'neg' },
+  ];
+  const el = document.getElementById('financeStats');
+  if (el) el.innerHTML = stats.map(s => `
+    <div class="stat-card">
+      <div class="label">${esc(s.label)}</div>
+      <div class="value ${s.cls || ''}">${s.value}</div>
+      ${s.sub ? `<div class="sub">${esc(s.sub)}</div>` : ''}
+    </div>`).join('');
+}
+
+const finSaveBtn = document.getElementById('finSaveBtn');
+if (finSaveBtn) {
+  finSaveBtn.addEventListener('click', () => {
+    if (!DATA.finance) DATA.finance = { cashOnHand: 0, bank: 0 };
+    DATA.finance.cashOnHand = num(document.getElementById('finCash').value);
+    DATA.finance.bank = num(document.getElementById('finBank').value);
+    saveData(); renderAll();
+    showToast('Balances saved.');
+  });
+}
+
 function renderAll() {
   renderDashboard();
   renderSingles();
@@ -1723,6 +2019,7 @@ function renderAll() {
   renderSales();
   renderTrades();
   renderExpenses();
+  renderFinance();
 }
 
 renderAll();
