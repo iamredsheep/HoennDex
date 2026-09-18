@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon.svg">
-<link rel="stylesheet" href="style.css?v=13">
+<link rel="stylesheet" href="style.css?v=14">
 </head>
 <body>
 
@@ -326,6 +326,55 @@
   <!-- BACKUP -->
   <section class="tab-panel" id="tab-backup">
     <div class="card narrow">
+      <h2>Cloud Folder Sync</h2>
+      <p class="muted">
+        Keep your PC and phone in sync by pointing HoennDex at a single
+        <strong>hoenndex-sync.json</strong> file saved inside a synced cloud folder
+        (Google Drive, Dropbox, OneDrive, or iCloud Drive). Save on one device, then
+        Load on the other once the cloud app finishes syncing the file.
+      </p>
+
+      <!-- Shown when the browser supports linking a file directly (Chrome/Edge desktop). -->
+      <div id="syncSupported" hidden>
+        <div class="sync-status" id="syncStatus">Not linked to a sync file yet.</div>
+        <div class="backup-actions">
+          <button class="btn primary" id="syncLinkBtn">Link Sync File…</button>
+          <button class="btn secondary" id="syncSaveBtn" hidden>⤒ Save to Cloud</button>
+          <button class="btn secondary" id="syncLoadBtn" hidden>⤓ Load from Cloud</button>
+          <button class="btn secondary" id="syncUnlinkBtn" hidden>Unlink</button>
+        </div>
+        <label class="sync-auto" id="syncAutoWrap" hidden>
+          <input type="checkbox" id="syncAutoToggle">
+          Auto-save to the cloud file after each change
+        </label>
+        <p class="muted" style="margin-top:10px;">
+          First time on each device: click <strong>Link Sync File…</strong> and pick (or create)
+          the same <strong>hoenndex-sync.json</strong> in your synced folder. On the device that
+          already has your data, Save first; on the other device, Load.
+        </p>
+      </div>
+
+      <!-- Shown on browsers without the File System Access API (iOS Safari, Firefox, most mobile). -->
+      <div id="syncUnsupported" hidden>
+        <p class="muted">
+          This browser can’t link directly to a file, so use the manual flow below:
+        </p>
+        <div class="backup-actions">
+          <button class="btn primary" id="syncShareBtn">Save / Share Sync File</button>
+          <label class="btn secondary file-btn">
+            Load Sync File
+            <input type="file" id="syncLoadInput" accept="application/json,.json" hidden>
+          </label>
+        </div>
+        <ol class="muted sync-steps">
+          <li><strong>To send data out:</strong> tap “Save / Share Sync File”, then save/share it into your cloud folder (Files → Drive/Dropbox) as <strong>hoenndex-sync.json</strong>, replacing the old copy.</li>
+          <li><strong>To pull data in:</strong> open the file from your cloud folder, then tap “Load Sync File” and select it.</li>
+          <li><strong>Tip:</strong> For automatic linking, use Chrome or Edge on desktop.</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="card narrow">
       <h2>Backup &amp; Restore</h2>
       <p class="muted">Your data is stored locally in this browser only. Export a backup regularly, especially before clearing browser data.</p>
       <div class="backup-actions">
@@ -357,7 +406,7 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="app.js?v=13"></script>
+<script src="app.js?v=14"></script>
 <script>
   // Register the service worker for offline use + installability.
   if ('serviceWorker' in navigator) {

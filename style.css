@@ -226,6 +226,22 @@ tbody tr:hover .sticky-col { background: #fafbfc; }
 .backup-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
 hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
 
+/* Cloud folder sync */
+.sync-status {
+  font-size: 0.85rem;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #f0f1f3;
+  border: 1px solid var(--border);
+  margin: 12px 0 4px;
+  word-break: break-word;
+}
+.sync-status.linked { background: var(--red-bg); border-color: var(--red); color: var(--red-dark, var(--red)); }
+.sync-auto { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--muted); margin: 4px 0; cursor: pointer; }
+.sync-auto input { width: auto; }
+.sync-steps { padding-left: 18px; margin: 10px 0 0; }
+.sync-steps li { margin-bottom: 6px; line-height: 1.4; }
+
 /* Modal */
 .modal-overlay {
   display: none;

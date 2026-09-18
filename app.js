@@ -39,6 +39,7 @@ function saveData() {
   localStorage.setItem(STORE_KEY, JSON.stringify(DATA));
   const el = document.getElementById('saveStatus');
   el.textContent = 'Saved ' + new Date().toLocaleTimeString();
+  if (typeof scheduleAutoSync === 'function') scheduleAutoSync();
 }
 
 function genId() {
@@ -1916,7 +1917,7 @@ document.getElementById('backupImportInput').addEventListener('change', e => {
     try {
       const parsed = JSON.parse(reader.result);
       if (!confirm('Restoring will replace ALL current data with the contents of this backup file. Continue?')) { e.target.value = ''; return; }
-      DATA = Object.assign(defaultData(), parsed);
+      applyImportedData(parsed);
       saveData(); renderAll();
       showToast('Backup restored.');
     } catch (err) {
@@ -1927,6 +1928,18 @@ document.getElementById('backupImportInput').addEventListener('change', e => {
   reader.readAsText(file);
 });
 
+/* Rebuild DATA from a parsed object, keeping only known top-level keys so that
+   sync metadata (_sync) and any stray fields never leak into the store. */
+function applyImportedData(parsed) {
+  const clean = defaultData();
+  if (parsed && typeof parsed === 'object') {
+    for (const key of Object.keys(clean)) {
+      if (parsed[key] !== undefined) clean[key] = parsed[key];
+    }
+  }
+  DATA = clean;
+}
+
 document.getElementById('clearAllBtn').addEventListener('click', () => {
   if (confirm('This will permanently erase ALL inventory, sales, purchases, trades, and expense data in this browser. This cannot be undone. Continue?')) {
     if (confirm('Are you absolutely sure? Consider downloading a backup first.')) {
@@ -1936,6 +1949,314 @@ document.getElementById('clearAllBtn').addEventListener('click', () => {
     }
   }
 });
+
+/* ===========================================================
+   CLOUD FOLDER SYNC
+   Point the app at one hoenndex-sync.json living in a synced
+   cloud folder (Drive/Dropbox/OneDrive/iCloud). Where the
+   File System Access API exists (Chrome/Edge desktop) we keep a
+   persistent handle to that file for one-tap Save/Load and
+   optional auto-save. Elsewhere we fall back to download + share
+   and a file picker.
+   =========================================================== */
+
+const SYNC_FILE_NAME = 'hoenndex-sync.json';
+const SYNC_META_KEY = 'pkmnTcgTracker_sync_v1';
+const SYNC_DB_NAME = 'hoenndex-sync';
+const SYNC_DB_STORE = 'handles';
+const SYNC_HANDLE_KEY = 'syncFile';
+
+const syncSupported = typeof window.showSaveFilePicker === 'function';
+
+let syncFileHandle = null;   // FileSystemFileHandle when linked
+let syncAutoTimer = null;
+
+function loadSyncMeta() {
+  try {
+    return Object.assign(
+      { autoSync: false, lastTag: null, lastAction: null, lastAt: null, deviceId: null },
+      JSON.parse(localStorage.getItem(SYNC_META_KEY) || '{}')
+    );
+  } catch (e) {
+    return { autoSync: false, lastTag: null, lastAction: null, lastAt: null, deviceId: null };
+  }
+}
+function saveSyncMeta(meta) {
+  try { localStorage.setItem(SYNC_META_KEY, JSON.stringify(meta)); } catch (e) { /* ignore quota */ }
+}
+let SYNC_META = loadSyncMeta();
+
+function deviceLabel() {
+  if (!SYNC_META.deviceId) {
+    const ua = navigator.userAgent || '';
+    let kind = 'device';
+    if (/Mobi|Android|iPhone|iPad|iPod/i.test(ua)) kind = 'phone';
+    else if (/Macintosh|Windows|Linux/i.test(ua)) kind = 'computer';
+    SYNC_META.deviceId = kind + '-' + Math.random().toString(16).slice(2, 6);
+    saveSyncMeta(SYNC_META);
+  }
+  return SYNC_META.deviceId;
+}
+
+/* ---- tiny IndexedDB helpers (file handles can't go in localStorage) ---- */
+function syncDbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(SYNC_DB_NAME, 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore(SYNC_DB_STORE); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+function syncDbGet(key) {
+  return syncDbOpen().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(SYNC_DB_STORE, 'readonly');
+    const r = tx.objectStore(SYNC_DB_STORE).get(key);
+    r.onsuccess = () => resolve(r.result || null);
+    r.onerror = () => reject(r.error);
+  }));
+}
+function syncDbSet(key, val) {
+  return syncDbOpen().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(SYNC_DB_STORE, 'readwrite');
+    tx.objectStore(SYNC_DB_STORE).put(val, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  }));
+}
+function syncDbDelete(key) {
+  return syncDbOpen().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(SYNC_DB_STORE, 'readwrite');
+    tx.objectStore(SYNC_DB_STORE).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  })).catch(() => {});
+}
+
+/* ---- shared payload/parse ---- */
+function buildSyncPayload() {
+  return JSON.stringify(Object.assign({}, DATA, {
+    _sync: { exportedAt: new Date().toISOString(), device: deviceLabel() }
+  }), null, 2);
+}
+function readTag(parsed) {
+  return (parsed && parsed._sync && parsed._sync.exportedAt) || null;
+}
+
+/* ---- permission handling for a stored handle ---- */
+async function ensurePermission(handle, mode) {
+  if (!handle.queryPermission) return true; // older impls grant implicitly
+  const opts = { mode };
+  if ((await handle.queryPermission(opts)) === 'granted') return true;
+  return (await handle.requestPermission(opts)) === 'granted';
+}
+
+/* ---- UI refresh ---- */
+function refreshSyncUI() {
+  const supEl = document.getElementById('syncSupported');
+  const unsupEl = document.getElementById('syncUnsupported');
+  if (!supEl || !unsupEl) return;
+
+  supEl.hidden = !syncSupported;
+  unsupEl.hidden = syncSupported;
+  if (!syncSupported) return;
+
+  const linked = !!syncFileHandle;
+  const statusEl = document.getElementById('syncStatus');
+  const linkBtn = document.getElementById('syncLinkBtn');
+  const saveBtn = document.getElementById('syncSaveBtn');
+  const loadBtn = document.getElementById('syncLoadBtn');
+  const unlinkBtn = document.getElementById('syncUnlinkBtn');
+  const autoWrap = document.getElementById('syncAutoWrap');
+  const autoToggle = document.getElementById('syncAutoToggle');
+
+  saveBtn.hidden = loadBtn.hidden = unlinkBtn.hidden = autoWrap.hidden = !linked;
+  linkBtn.textContent = linked ? 'Re-link Sync File…' : 'Link Sync File…';
+
+  if (linked) {
+    statusEl.classList.add('linked');
+    const name = (syncFileHandle && syncFileHandle.name) || SYNC_FILE_NAME;
+    let detail = 'Linked to ' + name + '.';
+    if (SYNC_META.lastAction && SYNC_META.lastAt) {
+      const when = new Date(SYNC_META.lastAt).toLocaleString();
+      detail += ' Last ' + SYNC_META.lastAction + ' ' + when + '.';
+    }
+    statusEl.textContent = detail;
+    autoToggle.checked = !!SYNC_META.autoSync;
+  } else {
+    statusEl.classList.remove('linked');
+    statusEl.textContent = 'Not linked to a sync file yet.';
+  }
+}
+
+/* ---- actions ---- */
+async function syncLink() {
+  try {
+    // A save picker both creates a new file and lets you select an existing one.
+    // It only returns a handle here — nothing is written until you hit Save —
+    // so picking the existing hoenndex-sync.json to Load from is safe.
+    const handle = await window.showSaveFilePicker({
+      suggestedName: SYNC_FILE_NAME,
+      types: [{ description: 'HoennDex sync file', accept: { 'application/json': ['.json'] } }]
+    });
+    if (!handle) return;
+    if (!(await ensurePermission(handle, 'readwrite'))) {
+      showToast('Permission to use that file was denied.');
+      return;
+    }
+    syncFileHandle = handle;
+    await syncDbSet(SYNC_HANDLE_KEY, handle);
+    refreshSyncUI();
+    showToast('Sync file linked. Use Save to push, Load to pull.');
+  } catch (err) {
+    if (err && err.name === 'AbortError') return; // user cancelled
+    console.error(err);
+    showToast('Could not link a sync file.');
+  }
+}
+
+async function syncSave(silent) {
+  if (!syncFileHandle) return;
+  try {
+    if (!(await ensurePermission(syncFileHandle, 'readwrite'))) {
+      showToast('Permission to write the sync file was denied.');
+      return;
+    }
+    // Conflict guard: warn if the file changed elsewhere since we last touched it.
+    if (!silent) {
+      try {
+        const existing = await syncFileHandle.getFile();
+        if (existing.size) {
+          const parsed = JSON.parse(await existing.text());
+          const tag = readTag(parsed);
+          if (tag && SYNC_META.lastTag && tag !== SYNC_META.lastTag) {
+            const dev = (parsed._sync && parsed._sync.device) || 'another device';
+            if (!confirm('The sync file was updated by ' + dev + ' since you last synced here.\n\nSaving now overwrites those changes. Consider loading first.\n\nOverwrite anyway?')) return;
+          }
+        }
+      } catch (e) { /* unreadable/empty file — just write */ }
+    }
+
+    const payload = buildSyncPayload();
+    const writable = await syncFileHandle.createWritable();
+    await writable.write(payload);
+    await writable.close();
+
+    SYNC_META.lastTag = readTag(JSON.parse(payload));
+    SYNC_META.lastAction = 'saved';
+    SYNC_META.lastAt = new Date().toISOString();
+    saveSyncMeta(SYNC_META);
+    refreshSyncUI();
+    if (!silent) showToast('Saved to cloud sync file.');
+  } catch (err) {
+    console.error(err);
+    if (!silent) showToast('Could not save to the sync file.');
+  }
+}
+
+async function syncLoad() {
+  if (!syncFileHandle) return;
+  try {
+    if (!(await ensurePermission(syncFileHandle, 'read'))) {
+      showToast('Permission to read the sync file was denied.');
+      return;
+    }
+    const file = await syncFileHandle.getFile();
+    if (!file.size) { showToast('The sync file is empty — nothing to load.'); return; }
+    const parsed = JSON.parse(await file.text());
+    if (!confirm('Loading will replace ALL data in this browser with the contents of the sync file. Continue?')) return;
+    applyImportedData(parsed);
+    saveData(); renderAll();
+    SYNC_META.lastTag = readTag(parsed);
+    SYNC_META.lastAction = 'loaded';
+    SYNC_META.lastAt = new Date().toISOString();
+    saveSyncMeta(SYNC_META);
+    refreshSyncUI();
+    showToast('Loaded from cloud sync file.');
+  } catch (err) {
+    console.error(err);
+    showToast('Could not load the sync file — is it valid JSON?');
+  }
+}
+
+async function syncUnlink() {
+  syncFileHandle = null;
+  SYNC_META.autoSync = false;
+  SYNC_META.lastTag = null;
+  saveSyncMeta(SYNC_META);
+  await syncDbDelete(SYNC_HANDLE_KEY);
+  refreshSyncUI();
+  showToast('Sync file unlinked (your data stays on this device).');
+}
+
+/* Debounced auto-save, triggered from saveData() when enabled. */
+function scheduleAutoSync() {
+  if (!syncSupported || !syncFileHandle || !SYNC_META.autoSync) return;
+  clearTimeout(syncAutoTimer);
+  syncAutoTimer = setTimeout(() => syncSave(true), 1500);
+}
+
+/* ---- fallback (no File System Access API) ---- */
+async function syncShareFallback() {
+  const payload = buildSyncPayload();
+  const file = new File([payload], SYNC_FILE_NAME, { type: 'application/json' });
+  // Prefer the native share sheet (iOS/Android) so it can land in a cloud app.
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: 'HoennDex sync' });
+      SYNC_META.lastAction = 'saved'; SYNC_META.lastAt = new Date().toISOString();
+      SYNC_META.lastTag = readTag(JSON.parse(payload)); saveSyncMeta(SYNC_META);
+      return;
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;
+      // fall through to download
+    }
+  }
+  downloadFile(SYNC_FILE_NAME, payload, 'application/json');
+  showToast('Saved ' + SYNC_FILE_NAME + ' — move it into your cloud folder.');
+}
+
+function syncLoadFallback(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(reader.result);
+      if (!confirm('Loading will replace ALL data in this browser with the contents of the sync file. Continue?')) { e.target.value = ''; return; }
+      applyImportedData(parsed);
+      saveData(); renderAll();
+      SYNC_META.lastTag = readTag(parsed); saveSyncMeta(SYNC_META);
+      showToast('Loaded from sync file.');
+    } catch (err) {
+      alert('Could not read that file — is it a valid sync JSON?');
+    }
+    e.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
+/* ---- wire up + restore any previously linked handle ---- */
+function initSync() {
+  if (syncSupported) {
+    document.getElementById('syncLinkBtn').addEventListener('click', syncLink);
+    document.getElementById('syncSaveBtn').addEventListener('click', () => syncSave(false));
+    document.getElementById('syncLoadBtn').addEventListener('click', syncLoad);
+    document.getElementById('syncUnlinkBtn').addEventListener('click', syncUnlink);
+    document.getElementById('syncAutoToggle').addEventListener('change', e => {
+      SYNC_META.autoSync = e.target.checked;
+      saveSyncMeta(SYNC_META);
+      if (SYNC_META.autoSync) scheduleAutoSync();
+    });
+    syncDbGet(SYNC_HANDLE_KEY).then(handle => {
+      if (handle) { syncFileHandle = handle; refreshSyncUI(); }
+    }).catch(() => {});
+  } else {
+    document.getElementById('syncShareBtn').addEventListener('click', syncShareFallback);
+    document.getElementById('syncLoadInput').addEventListener('change', syncLoadFallback);
+  }
+  refreshSyncUI();
+}
+initSync();
 
 /* ===========================================================
    INIT
