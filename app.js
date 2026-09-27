@@ -454,7 +454,7 @@ function openInventoryModal(item, forcedCategory) {
   const isBinder = category === 'Binder';
   const typeLabel = isBinder ? 'Binder Entry' : (isSlabCat ? 'Graded Slab' : 'Single Card');
   const v = item || {
-    category, era: 'Modern', language: 'ENG', name: '', set: '', cardNumber: '', condition: 'NM',
+    category, era: 'Vintage', language: 'ENG', name: '', set: '', cardNumber: '', condition: 'NM',
     gradingCompany: 'PSA', grade: '', quantity: 1, costPerUnit: 0,
     marketPerUnit: 0, dateAcquired: todayISO(), source: 'Purchased', notes: ''
   };
@@ -476,7 +476,7 @@ function openInventoryModal(item, forcedCategory) {
 
   const html = `
     <div class="form-grid">
-      <div class="field"><label>Era</label><select id="f_era">${fieldOptions(ERAS, ERAS.includes(v.era) ? v.era : 'Modern')}</select></div>
+      <div class="field"><label>Era</label><select id="f_era">${fieldOptions(ERAS, ERAS.includes(v.era) ? v.era : 'Vintage')}</select></div>
       <div class="field"><label>Language</label><select id="f_language">${fieldOptions(LANGUAGES, LANGUAGES.includes(v.language) ? v.language : 'ENG')}</select></div>
 
       <div class="field full"><label>${nameLabel}</label><input id="f_name" type="text" value="${esc(v.name)}" placeholder="${namePlaceholder}"></div>
