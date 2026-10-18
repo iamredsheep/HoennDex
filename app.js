@@ -8,6 +8,7 @@ const STORE_KEY = 'pkmnTcgTracker_v1';
 const CATEGORIES = ['Single Card', 'Graded Slabs'];
 const ERAS = ['Modern', 'Mid-Era', 'Vintage'];
 const LANGUAGES = ['ENG', 'JP', 'CN'];
+const FINISHES = ['Non-Holo', 'Holo', 'Reverse Holo'];
 const CONDITIONS = ['NM', 'LP', 'MP', 'HP', 'DMG', 'Sealed'];
 const SOURCES = ['Purchased', 'Trade', 'Pulled/Opened', 'Other'];
 const PLATFORMS = ['eBay', 'TCGPlayer', 'Facebook/Marketplace', 'Whatnot', 'Local/Card Show', 'Other'];
@@ -18,10 +19,23 @@ const GRADING_COMPANIES = ['PSA', 'CGC', 'BGS', 'SGC', 'Other'];
 /* ---------------- Data store ---------------- */
 
 function defaultData() {
-  return { inventory: [], lots: [], shows: [], purchases: [], sales: [], trades: [], expenses: [], finance: { cashOnHand: 0, bank: 0 } };
+  return { inventory: [], lots: [], shows: [], purchases: [], sales: [], trades: [], expenses: [], finance: { cashLedger: [] } };
 }
 
 let DATA = loadData();
+normalizeFinance();
+
+// Ensure finance is a cash ledger; migrate any old editable cash/bank balances to deposits.
+function normalizeFinance() {
+  if (!DATA.finance || typeof DATA.finance !== 'object') DATA.finance = { cashLedger: [] };
+  if (!Array.isArray(DATA.finance.cashLedger)) DATA.finance.cashLedger = [];
+  if (num(DATA.finance.cashOnHand) || num(DATA.finance.bank)) {
+    if (num(DATA.finance.cashOnHand)) DATA.finance.cashLedger.push({ id: genId(), date: todayISO(), kind: 'deposit', cashDelta: num(DATA.finance.cashOnHand), bankDelta: 0, label: 'Deposit to Cash — starting balance (migrated)' });
+    if (num(DATA.finance.bank)) DATA.finance.cashLedger.push({ id: genId(), date: todayISO(), kind: 'deposit', cashDelta: 0, bankDelta: num(DATA.finance.bank), label: 'Deposit to Bank — starting balance (migrated)' });
+    delete DATA.finance.cashOnHand; delete DATA.finance.bank;
+    saveData();
+  }
+}
 
 function loadData() {
   try {
@@ -208,7 +222,7 @@ function renderSingles() {
   renderOverviewInto('singlesOverview', itemsOfCategory('Single Card'), 'Singles Overview — Cost Basis by Era');
   const rows = invApplyFilters(itemsOfCategory('Single Card'), 'singlesSearch', 'singlesEraFilter');
   const tbody = document.querySelector('#singlesTable tbody');
-  if (!rows.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="13">No single cards yet.</td></tr>`; return; }
+  if (!rows.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="14">No single cards yet.</td></tr>`; return; }
   tbody.innerHTML = rows.map(item => {
     const { totalCost, totalMarket } = invTotals(item);
     return `<tr>
@@ -217,6 +231,7 @@ function renderSingles() {
       <td>${esc(item.era || '')}</td>
       <td>${esc(item.set)}</td>
       <td>${esc(item.language || '')}</td>
+      <td>${esc(item.finish || '')}</td>
       <td>${esc(item.condition || '')}</td>
       <td class="num">${item.quantity}</td>
       <td class="num">${money(item.costPerUnit)}</td>
@@ -233,7 +248,7 @@ function renderSlabs() {
   renderOverviewInto('slabsOverview', itemsOfCategory('Graded Slabs'), 'Slabs Overview — Cost Basis by Era');
   const rows = invApplyFilters(itemsOfCategory('Graded Slabs'), 'slabsSearch', 'slabsEraFilter');
   const tbody = document.querySelector('#slabsTable tbody');
-  if (!rows.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="13">No graded slabs yet.</td></tr>`; return; }
+  if (!rows.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="14">No graded slabs yet.</td></tr>`; return; }
   tbody.innerHTML = rows.map(item => {
     const { totalCost, totalMarket } = invTotals(item);
     const grade = `${esc(item.gradingCompany || '')} ${esc(item.grade || '')}`.trim();
@@ -243,6 +258,7 @@ function renderSlabs() {
       <td>${esc(item.era || '')}</td>
       <td>${esc(item.set)}</td>
       <td>${esc(item.language || '')}</td>
+      <td>${esc(item.finish || '')}</td>
       <td>${grade ? `<span class="badge graded">${grade}</span>` : '<span class="muted">—</span>'}</td>
       <td class="num">${item.quantity}</td>
       <td class="num">${money(item.costPerUnit)}</td>
@@ -435,7 +451,7 @@ function exportInvCsv(filename, items) {
     { label: 'Name', get: r => r.name }, { label: 'Category', get: r => r.category },
     { label: 'Era', get: r => r.era }, { label: 'Language', get: r => r.language },
     { label: 'Set', get: r => r.set }, { label: 'Card #', get: r => r.cardNumber },
-    { label: 'Condition', get: r => isSlab(r) ? '' : r.condition }, { label: 'Grading Co', get: r => r.gradingCompany },
+    { label: 'Finish', get: r => r.finish }, { label: 'Condition', get: r => isSlab(r) ? '' : r.condition }, { label: 'Grading Co', get: r => r.gradingCompany },
     { label: 'Grade', get: r => r.grade }, { label: 'Quantity', get: r => r.quantity }, { label: 'Cost/Unit', get: r => r.costPerUnit },
     { label: 'Market/Unit', get: r => r.marketPerUnit }, { label: 'Date Acquired', get: r => r.dateAcquired },
     { label: 'Source', get: r => r.source }, { label: 'Notes', get: r => r.notes },
@@ -455,7 +471,7 @@ function openInventoryModal(item, forcedCategory) {
   const typeLabel = isBinder ? 'Binder Entry' : (isSlabCat ? 'Graded Slab' : 'Single Card');
   const v = item || {
     category, era: 'Vintage', language: 'ENG', name: '', set: '', cardNumber: '', condition: 'NM',
-    gradingCompany: 'PSA', grade: '', quantity: 1, costPerUnit: 0,
+    finish: 'Non-Holo', gradingCompany: 'PSA', grade: '', quantity: 1, costPerUnit: 0,
     marketPerUnit: 0, dateAcquired: todayISO(), source: 'Purchased', notes: ''
   };
 
@@ -473,6 +489,8 @@ function openInventoryModal(item, forcedCategory) {
   const gradingBlock = isSlabCat ? `
       <div class="field"><label>Grading Company</label><select id="f_gradingCompany">${fieldOptions(GRADING_COMPANIES, v.gradingCompany || 'PSA')}</select></div>
       <div class="field"><label>Grade</label><input id="f_grade" type="text" value="${esc(v.grade)}" placeholder="e.g. 10"></div>` : '';
+  const finishBlock = isBinder ? '' : `
+      <div class="field"><label>Finish</label><select id="f_finish">${fieldOptions(FINISHES, FINISHES.includes(v.finish) ? v.finish : 'Non-Holo')}</select></div>`;
 
   const html = `
     <div class="form-grid">
@@ -483,8 +501,9 @@ function openInventoryModal(item, forcedCategory) {
       ${setBlock}
       ${conditionBlock}
       ${gradingBlock}
+      ${finishBlock}
       <div class="field"><label>${qtyLabel}</label><input id="f_quantity" type="number" min="0" step="1" value="${v.quantity}"></div>
-      ${(isBinder || isSlabCat) ? '<div class="field"></div>' : ''}
+      ${isBinder ? '<div class="field"></div>' : ''}
 
       <div class="field"><label>${costLabel}</label><input id="f_costPerUnit" type="number" min="0" step="0.01" value="${v.costPerUnit}"></div>
       <div class="field"><label>${marketLabel}</label><input id="f_marketPerUnit" type="number" min="0" step="0.01" value="${v.marketPerUnit}"></div>
@@ -514,6 +533,7 @@ function openInventoryModal(item, forcedCategory) {
         set: val('#f_set').trim(),
         cardNumber: val('#f_cardNumber').trim(),
         condition: (isSlabCat || isBinder) ? '' : val('#f_condition'),
+        finish: isBinder ? '' : val('#f_finish'),
         graded: isSlabCat,
         gradingCompany: isSlabCat ? val('#f_gradingCompany') : '',
         grade: isSlabCat ? val('#f_grade').trim() : '',
@@ -584,6 +604,7 @@ function openPurchaseModal(p) {
       <div class="field"><label>Vendor</label><input id="f_vendor" type="text" value="${esc(v.vendor)}" placeholder="e.g. Local card shop"></div>
       <div class="field"><label>Category</label><select id="f_category">${fieldOptions(PURCHASE_CATS, v.category)}</select></div>
       <div class="field"><label>Amount</label><input id="f_amount" type="number" min="0" step="0.01" value="${v.amount}"></div>
+      ${paymentFieldsHtml('Paid', v)}
       <div class="field full"><label>Show / Event</label><select id="f_showId">${showOptionsHtml(v.showId)}</select></div>
       <div class="field full"><label>Description</label><input id="f_description" type="text" value="${esc(v.description)}" placeholder="What did you buy?"></div>
       <div class="field full"><label>Notes</label><textarea id="f_notes">${esc(v.notes)}</textarea></div>
@@ -594,17 +615,22 @@ function openPurchaseModal(p) {
       <button class="btn primary" id="saveBtn">${isEdit ? 'Save Changes' : 'Add Purchase'}</button>
     </div>`;
   openModal(isEdit ? 'Edit Purchase' : 'Add Purchase', html, body => {
+    wirePayToggle(body);
     body.querySelector('#cancelBtn').addEventListener('click', closeModal);
     body.querySelector('#saveBtn').addEventListener('click', () => {
+      const amount = num(body.querySelector('#f_amount').value);
+      const pay = readPayment(body, amount);
       const record = {
         id: isEdit ? p.id : genId(),
         date: body.querySelector('#f_date').value || todayISO(),
         vendor: body.querySelector('#f_vendor').value.trim(),
         category: body.querySelector('#f_category').value,
         description: body.querySelector('#f_description').value.trim(),
-        amount: num(body.querySelector('#f_amount').value),
+        amount,
         showId: body.querySelector('#f_showId').value,
         notes: body.querySelector('#f_notes').value.trim(),
+        paymentMethod: pay.paymentMethod,
+        payment: pay.payment,
       };
       if (isEdit) Object.assign(p, record); else DATA.purchases.push(record);
       saveData(); renderAll(); closeModal();
@@ -665,6 +691,7 @@ function openExpenseModal(x) {
       <div class="field"><label>Date</label><input id="f_date" type="date" value="${esc(v.date)}"></div>
       <div class="field"><label>Category</label><select id="f_category">${fieldOptions(EXPENSE_CATS, v.category)}</select></div>
       <div class="field"><label>Amount</label><input id="f_amount" type="number" min="0" step="0.01" value="${v.amount}"></div>
+      ${paymentFieldsHtml('Paid', v)}
       <div class="field"><label>Show / Event</label><select id="f_showId">${showOptionsHtml(v.showId)}</select></div>
       <div class="field full"><label>Description</label><input id="f_description" type="text" value="${esc(v.description)}"></div>
       <div class="field full"><label>Notes</label><textarea id="f_notes">${esc(v.notes)}</textarea></div>
@@ -674,16 +701,21 @@ function openExpenseModal(x) {
       <button class="btn primary" id="saveBtn">${isEdit ? 'Save Changes' : 'Add Expense'}</button>
     </div>`;
   openModal(isEdit ? 'Edit Expense' : 'Add Expense', html, body => {
+    wirePayToggle(body);
     body.querySelector('#cancelBtn').addEventListener('click', closeModal);
     body.querySelector('#saveBtn').addEventListener('click', () => {
+      const amount = num(body.querySelector('#f_amount').value);
+      const pay = readPayment(body, amount);
       const record = {
         id: isEdit ? x.id : genId(),
         date: body.querySelector('#f_date').value || todayISO(),
         category: body.querySelector('#f_category').value,
         description: body.querySelector('#f_description').value.trim(),
-        amount: num(body.querySelector('#f_amount').value),
+        amount,
         showId: body.querySelector('#f_showId').value,
         notes: body.querySelector('#f_notes').value.trim(),
+        paymentMethod: pay.paymentMethod,
+        payment: pay.payment,
       };
       if (isEdit) Object.assign(x, record); else DATA.expenses.push(record);
       saveData(); renderAll(); closeModal();
@@ -1023,6 +1055,7 @@ function openSaleModal(sale) {
       <div class="field"><label>Show / Event</label><select id="f_showId">${showOptionsHtml(v.showId)}</select></div>
       <div class="field"><label>Fees</label><input id="f_fees" type="number" min="0" step="0.01" value="${v.fees || 0}"></div>
       <div class="field"><label>Shipping Cost</label><input id="f_shipping" type="number" min="0" step="0.01" value="${v.shipping || 0}"></div>
+      ${paymentFieldsHtml('Received', v)}
     </div>
 
     <h3>Items Sold</h3>
@@ -1042,6 +1075,7 @@ function openSaleModal(sale) {
     const lineWrap = body.querySelector('#saleLineItemsWrap');
     renderSaleLineItems(lineWrap);
     updateSaleTotalsDisplay();
+    wirePayToggle(body);
 
     body.querySelector('#addLineBtn').addEventListener('click', () => {
       saleLineItems.push({ inventoryId: '', name: '', qty: 1, priceEach: 0, costEach: 0 });
@@ -1100,6 +1134,8 @@ function openSaleModal(sale) {
 
       consumeInventory(finalItems);
 
+      const revenue = finalItems.reduce((s, i) => s + num(i.qty) * num(i.priceEach), 0);
+      const pay = readPayment(body, revenue);
       const record = {
         id: isEdit ? sale.id : genId(),
         date: body.querySelector('#f_date').value || todayISO(),
@@ -1110,6 +1146,8 @@ function openSaleModal(sale) {
         fees: num(body.querySelector('#f_fees').value),
         shipping: num(body.querySelector('#f_shipping').value),
         notes: body.querySelector('#f_notes').value.trim(),
+        paymentMethod: pay.paymentMethod,
+        payment: pay.payment,
       };
       if (isEdit) Object.assign(sale, record); else DATA.sales.push(record);
       saveData(); renderAll(); closeModal();
@@ -1967,45 +2005,166 @@ window.addEventListener('appinstalled', () => {
    FINANCE  (cash on hand + bank − expenses = available cashflow)
    =========================================================== */
 
+// Inventory value (cost + market), including unsold bulk-lot cards at cost.
+function inventoryTotals() {
+  const invCost = DATA.inventory.reduce((s, i) => s + num(i.quantity) * num(i.costPerUnit), 0);
+  const invMarket = DATA.inventory.reduce((s, i) => s + num(i.quantity) * num(i.marketPerUnit), 0);
+  const lotCost = DATA.lots.reduce((s, l) => s + lotStats(l).remainingCost, 0);
+  return { cost: invCost + lotCost, market: invMarket + lotCost };
+}
+
+// Cash & bank balances, derived from the ledger + how sales/purchases/expenses were paid.
+function financeBalances() {
+  let cash = 0, bank = 0;
+  for (const e of ((DATA.finance && DATA.finance.cashLedger) || [])) { cash += num(e.cashDelta); bank += num(e.bankDelta); }
+  for (const s of DATA.sales) { cash += num(s.payment && s.payment.cash); bank += num(s.payment && s.payment.bank); }
+  for (const p of DATA.purchases) { cash -= num(p.payment && p.payment.cash); bank -= num(p.payment && p.payment.bank); }
+  for (const x of DATA.expenses) { cash -= num(x.payment && x.payment.cash); bank -= num(x.payment && x.payment.bank); }
+  return { cash, bank, available: cash + bank };
+}
+
+// Combined cash movements (manual adjustments + money in/out from transactions).
+function cashActivity() {
+  const out = [];
+  for (const e of ((DATA.finance && DATA.finance.cashLedger) || [])) out.push({ src: 'adjust', id: e.id, date: e.date, label: e.label || 'Adjustment', cash: num(e.cashDelta), bank: num(e.bankDelta) });
+  for (const s of DATA.sales) { const p = s.payment || {}; if (num(p.cash) || num(p.bank)) out.push({ src: 'Sale', date: s.date, label: 'Sale' + (s.buyer ? ' — ' + s.buyer : ''), cash: num(p.cash), bank: num(p.bank) }); }
+  for (const p of DATA.purchases) { const pm = p.payment || {}; if (num(pm.cash) || num(pm.bank)) out.push({ src: 'Purchase', date: p.date, label: 'Purchase' + (p.vendor ? ' — ' + p.vendor : ''), cash: -num(pm.cash), bank: -num(pm.bank) }); }
+  for (const x of DATA.expenses) { const pm = x.payment || {}; if (num(pm.cash) || num(pm.bank)) out.push({ src: 'Expense', date: x.date, label: 'Expense — ' + (x.category || ''), cash: -num(pm.cash), bank: -num(pm.bank) }); }
+  out.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  return out;
+}
+
 function renderFinance() {
-  const f = DATA.finance || (DATA.finance = { cashOnHand: 0, bank: 0 });
-  const cash = num(f.cashOnHand);
-  const bank = num(f.bank);
-  const onHand = cash + bank;
-  const totalExpenses = DATA.expenses.reduce((s, x) => s + num(x.amount), 0);
-  const available = onHand - totalExpenses;
-
-  // Keep inputs in sync without clobbering what the user is currently typing.
-  const cashEl = document.getElementById('finCash');
-  const bankEl = document.getElementById('finBank');
-  if (cashEl && document.activeElement !== cashEl) cashEl.value = cash;
-  if (bankEl && document.activeElement !== bankEl) bankEl.value = bank;
-
+  const inv = inventoryTotals();
+  const bal = financeBalances();
   const stats = [
-    { label: 'Cash on Hand', value: money(cash) },
-    { label: 'Bank Balance', value: money(bank) },
-    { label: 'Total On Hand', value: money(onHand), sub: 'Cash + Bank' },
-    { label: 'Total Expenses', value: money(totalExpenses), sub: `${DATA.expenses.length} ${DATA.expenses.length === 1 ? 'entry' : 'entries'}` },
-    { label: 'Available Cashflow', value: money(available), sub: 'On hand − expenses', cls: available >= 0 ? 'pos' : 'neg' },
+    { label: 'Inventory Cost Basis', value: money(inv.cost), sub: 'What you paid (incl. lots)' },
+    { label: 'Inventory Market Value', value: money(inv.market), sub: 'Current value' },
+    { label: 'Cash on Hand', value: money(bal.cash), cls: bal.cash < 0 ? 'neg' : '' },
+    { label: 'Bank Balance', value: money(bal.bank), cls: bal.bank < 0 ? 'neg' : '' },
+    { label: 'Available Cash', value: money(bal.available), sub: 'Cash + Bank', cls: bal.available >= 0 ? 'pos' : 'neg' },
+    { label: 'Total Business Value', value: money(inv.market + bal.available), sub: 'Inventory (market) + cash' },
   ];
   const el = document.getElementById('financeStats');
   if (el) el.innerHTML = stats.map(s => `
-    <div class="stat-card">
-      <div class="label">${esc(s.label)}</div>
-      <div class="value ${s.cls || ''}">${s.value}</div>
-      ${s.sub ? `<div class="sub">${esc(s.sub)}</div>` : ''}
-    </div>`).join('');
+    <div class="stat-card"><div class="label">${esc(s.label)}</div>
+      <div class="value ${s.cls || ''}">${s.value}</div>${s.sub ? `<div class="sub">${esc(s.sub)}</div>` : ''}</div>`).join('');
+
+  const tbody = document.querySelector('#cashLedgerTable tbody');
+  if (tbody) {
+    const act = cashActivity();
+    tbody.innerHTML = act.length ? act.map(a => `
+      <tr>
+        <td>${esc(a.date)}</td>
+        <td class="wrap">${esc(a.label)}</td>
+        <td class="num ${a.cash > 0 ? 'pos' : (a.cash < 0 ? 'neg' : '')}">${a.cash ? (a.cash > 0 ? '+' : '') + money(a.cash) : '—'}</td>
+        <td class="num ${a.bank > 0 ? 'pos' : (a.bank < 0 ? 'neg' : '')}">${a.bank ? (a.bank > 0 ? '+' : '') + money(a.bank) : '—'}</td>
+        <td>${a.src === 'adjust' ? `<button class="btn danger small" data-cashdel="${a.id}">Delete</button>` : `<span class="muted">${esc(a.src)}</span>`}</td>
+      </tr>`).join('') : `<tr class="empty-row"><td colspan="5">No cash activity yet. Deposit your current cash and bank to set your starting point.</td></tr>`;
+  }
 }
 
-const finSaveBtn = document.getElementById('finSaveBtn');
-if (finSaveBtn) {
-  finSaveBtn.addEventListener('click', () => {
-    if (!DATA.finance) DATA.finance = { cashOnHand: 0, bank: 0 };
-    DATA.finance.cashOnHand = num(document.getElementById('finCash').value);
-    DATA.finance.bank = num(document.getElementById('finBank').value);
-    saveData(); renderAll();
-    showToast('Balances saved.');
+// Deposit / withdraw / transfer between Cash and Bank.
+function openCashMoveModal() {
+  const html = `
+    <div class="form-grid">
+      <div class="field"><label>Date</label><input id="f_date" type="date" value="${todayISO()}"></div>
+      <div class="field"><label>Type</label>
+        <select id="f_moveType"><option value="deposit">Deposit</option><option value="withdraw">Withdraw</option><option value="transfer">Transfer</option></select>
+      </div>
+      <div class="field" id="wrap_acct"><label>Account</label>
+        <select id="f_acct"><option value="cash">Cash on Hand</option><option value="bank">Bank</option></select>
+      </div>
+      <div class="field" id="wrap_dir" style="display:none"><label>Direction</label>
+        <select id="f_dir"><option value="c2b">Cash → Bank</option><option value="b2c">Bank → Cash</option></select>
+      </div>
+      <div class="field"><label>Amount</label><input id="f_amount" type="number" min="0" step="0.01" value="0"></div>
+      <div class="field full"><label>Note</label><input id="f_note" type="text" placeholder="e.g. Starting capital, ATM withdrawal"></div>
+    </div>
+    <div class="form-actions">
+      <button class="btn secondary" id="cancelBtn">Cancel</button>
+      <button class="btn primary" id="saveBtn">Save</button>
+    </div>`;
+  openModal('Cash Movement', html, body => {
+    const typeSel = body.querySelector('#f_moveType');
+    const toggle = () => {
+      const t = typeSel.value === 'transfer';
+      body.querySelector('#wrap_acct').style.display = t ? 'none' : 'block';
+      body.querySelector('#wrap_dir').style.display = t ? 'block' : 'none';
+    };
+    typeSel.addEventListener('change', toggle); toggle();
+    body.querySelector('#cancelBtn').addEventListener('click', closeModal);
+    body.querySelector('#saveBtn').addEventListener('click', () => {
+      const amt = num(body.querySelector('#f_amount').value);
+      if (amt <= 0) { alert('Enter an amount greater than zero.'); return; }
+      const date = body.querySelector('#f_date').value || todayISO();
+      const note = body.querySelector('#f_note').value.trim();
+      const type = typeSel.value;
+      let cashDelta = 0, bankDelta = 0, label = '';
+      if (type === 'transfer') {
+        const dir = body.querySelector('#f_dir').value;
+        if (dir === 'c2b') { cashDelta = -amt; bankDelta = amt; label = 'Transfer Cash → Bank'; }
+        else { cashDelta = amt; bankDelta = -amt; label = 'Transfer Bank → Cash'; }
+      } else {
+        const acct = body.querySelector('#f_acct').value;
+        const sign = type === 'deposit' ? 1 : -1;
+        if (acct === 'cash') cashDelta = sign * amt; else bankDelta = sign * amt;
+        label = (type === 'deposit' ? 'Deposit to ' : 'Withdraw from ') + (acct === 'cash' ? 'Cash' : 'Bank');
+      }
+      if (note) label += ' — ' + note;
+      if (!DATA.finance) DATA.finance = { cashLedger: [] };
+      if (!DATA.finance.cashLedger) DATA.finance.cashLedger = [];
+      DATA.finance.cashLedger.push({ id: genId(), date, kind: type, cashDelta, bankDelta, label });
+      saveData(); renderAll(); closeModal();
+      showToast('Recorded.');
+    });
   });
+}
+
+{
+  const cashMoveBtn = document.getElementById('cashMoveBtn');
+  if (cashMoveBtn) cashMoveBtn.addEventListener('click', openCashMoveModal);
+  const cashTbody = document.querySelector('#cashLedgerTable tbody');
+  if (cashTbody) cashTbody.addEventListener('click', e => {
+    const btn = e.target.closest('button[data-cashdel]'); if (!btn) return;
+    if (confirm('Delete this cash movement?')) {
+      DATA.finance.cashLedger = (DATA.finance.cashLedger || []).filter(x => x.id !== btn.dataset.cashdel);
+      saveData(); renderAll(); showToast('Deleted.');
+    }
+  });
+}
+
+/* ---- Payment split (how a sale/purchase/expense was paid) ---- */
+function paymentFieldsHtml(verb, v) {
+  const method = (v && v.paymentMethod) || 'cash';
+  const pay = (v && v.payment) || { cash: 0, bank: 0 };
+  return `
+      <div class="field"><label>${verb} via</label>
+        <select id="f_payMethod">
+          <option value="cash" ${method === 'cash' ? 'selected' : ''}>Cash</option>
+          <option value="bank" ${method === 'bank' ? 'selected' : ''}>Bank transfer</option>
+          <option value="split" ${method === 'split' ? 'selected' : ''}>Split (cash + bank)</option>
+        </select>
+      </div>
+      <div class="field" id="wrap_paySplit" style="display:${method === 'split' ? 'block' : 'none'}">
+        <label>Cash / Bank amounts</label>
+        <div style="display:flex;gap:8px;">
+          <input id="f_payCash" type="number" min="0" step="0.01" value="${num(pay.cash)}" placeholder="Cash">
+          <input id="f_payBank" type="number" min="0" step="0.01" value="${num(pay.bank)}" placeholder="Bank">
+        </div>
+      </div>`;
+}
+function wirePayToggle(body) {
+  const sel = body.querySelector('#f_payMethod'); if (!sel) return;
+  const toggle = () => { body.querySelector('#wrap_paySplit').style.display = sel.value === 'split' ? 'block' : 'none'; };
+  sel.addEventListener('change', toggle); toggle();
+}
+function readPayment(body, amount) {
+  const sel = body.querySelector('#f_payMethod');
+  const method = sel ? sel.value : 'cash';
+  if (method === 'bank') return { paymentMethod: 'bank', payment: { cash: 0, bank: num(amount) } };
+  if (method === 'split') return { paymentMethod: 'split', payment: { cash: num(body.querySelector('#f_payCash').value), bank: num(body.querySelector('#f_payBank').value) } };
+  return { paymentMethod: 'cash', payment: { cash: num(amount), bank: 0 } };
 }
 
 function renderAll() {
