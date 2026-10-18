@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon.svg">
-<link rel="stylesheet" href="style.css?v=17">
+<link rel="stylesheet" href="style.css?v=18">
 </head>
 <body>
 
@@ -30,16 +30,17 @@
 
 <nav class="tabs" id="tabNav">
   <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
-  <button class="tab-btn" data-tab="singles">Singles</button>
-  <button class="tab-btn" data-tab="slabs">Slabs</button>
-  <button class="tab-btn" data-tab="binder">Binder</button>
+  <button class="tab-btn" data-tab="inventory">Main Inventory</button>
+  <button class="tab-btn" data-tab="binder">Binders</button>
   <button class="tab-btn" data-tab="lots">Lots</button>
-  <button class="tab-btn" data-tab="shows">Shows</button>
   <button class="tab-btn" data-tab="transactions">Transactions</button>
   <button class="tab-btn" data-tab="expenses">Expenses</button>
-  <button class="tab-btn" data-tab="finance">Finance</button>
-  <button class="tab-btn" data-tab="backup">Backup</button>
+  <button class="tab-btn" data-tab="finance">Finances</button>
+  <button class="tab-btn" data-tab="shows">Shows</button>
+  <button class="tab-btn" data-tab="system">System</button>
 </nav>
+
+<div id="modeBanner"></div>
 
 <main id="app">
 
@@ -59,82 +60,87 @@
   </section>
 
   <!-- SINGLES -->
-  <section class="tab-panel" id="tab-singles">
-    <div id="singlesOverview"></div>
-    <div class="toolbar">
-      <input type="search" id="singlesSearch" placeholder="Search name, set, #...">
-      <select id="singlesEraFilter">
-        <option value="">All Eras</option>
-        <option value="Modern">Modern</option>
-        <option value="Mid-Era">Mid-Era</option>
-        <option value="Vintage">Vintage</option>
-      </select>
-      <span class="spacer"></span>
-      <button class="btn secondary" id="singlesExportCsv">Export CSV</button>
-      <button class="btn primary" id="singlesAddBtn">+ Add Single</button>
-    </div>
-    <div class="table-wrap">
-      <table id="singlesTable" class="inv-table">
-        <thead>
-          <tr>
-            <th class="sticky-col sticky-1 sortable" data-sort="name">Name</th>
-            <th class="sticky-col sticky-2 sortable" data-sort="cardNumber">#</th>
-            <th class="sortable" data-sort="era">Era</th>
-            <th class="sortable" data-sort="set">Set</th>
-            <th class="sortable" data-sort="language">Lang</th>
-            <th class="sortable" data-sort="finish">Finish</th>
-            <th class="sortable" data-sort="condition">Condition</th>
-            <th class="num sortable" data-sort="quantity">Qty</th>
-            <th class="num sortable" data-sort="costPerUnit">Cost/Ea</th>
-            <th class="num sortable" data-sort="marketPerUnit">Market/Ea</th>
-            <th class="num sortable" data-sort="totalCost">Total Cost</th>
-            <th class="num sortable" data-sort="totalMarket">Total Market</th>
-            <th class="sortable" data-sort="dateAcquired">Acquired</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </section>
+  <!-- MAIN INVENTORY (Singles / Slabs) -->
+  <section class="tab-panel" id="tab-inventory">
+    <nav class="subtabs" id="invSubtabs">
+      <button class="subtab-btn active" data-subtab="singles">Singles</button>
+      <button class="subtab-btn" data-subtab="slabs">Slabs</button>
+    </nav>
 
-  <!-- SLABS -->
-  <section class="tab-panel" id="tab-slabs">
-    <div id="slabsOverview"></div>
-    <div class="toolbar">
-      <input type="search" id="slabsSearch" placeholder="Search name, set, #...">
-      <select id="slabsEraFilter">
-        <option value="">All Eras</option>
-        <option value="Modern">Modern</option>
-        <option value="Mid-Era">Mid-Era</option>
-        <option value="Vintage">Vintage</option>
-      </select>
-      <span class="spacer"></span>
-      <button class="btn secondary" id="slabsExportCsv">Export CSV</button>
-      <button class="btn primary" id="slabsAddBtn">+ Add Slab</button>
+    <div class="subtab-panel active" id="sub-singles">
+      <div class="toolbar">
+        <input type="search" id="singlesSearch" placeholder="Search name, set, #...">
+        <select id="singlesEraFilter">
+          <option value="">All Eras</option>
+          <option value="Modern">Modern</option>
+          <option value="Mid-Era">Mid-Era</option>
+          <option value="Vintage">Vintage</option>
+        </select>
+        <span class="spacer"></span>
+        <button class="btn secondary" id="singlesExportCsv">Export CSV</button>
+        <button class="btn primary" id="singlesAddBtn">+ Add Single</button>
+      </div>
+      <div class="table-wrap">
+        <table id="singlesTable" class="inv-table">
+          <thead>
+            <tr>
+              <th class="sticky-col sticky-1 sortable" data-sort="name">Name</th>
+              <th class="sticky-col sticky-2 sortable" data-sort="cardNumber">#</th>
+              <th class="sortable" data-sort="era">Era</th>
+              <th class="sortable" data-sort="set">Set</th>
+              <th class="sortable" data-sort="language">Lang</th>
+              <th class="sortable" data-sort="finish">Finish</th>
+              <th class="sortable" data-sort="condition">Condition</th>
+              <th class="num sortable" data-sort="quantity">Qty</th>
+              <th class="num sortable" data-sort="costPerUnit">Cost/Ea</th>
+              <th class="num sortable" data-sort="marketPerUnit">Market/Ea</th>
+              <th class="num sortable" data-sort="totalCost">Total Cost</th>
+              <th class="num sortable" data-sort="totalMarket">Total Market</th>
+              <th class="sortable" data-sort="dateAcquired">Acquired</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
-    <div class="table-wrap">
-      <table id="slabsTable" class="inv-table">
-        <thead>
-          <tr>
-            <th class="sticky-col sticky-1">Name</th>
-            <th class="sticky-col sticky-2">#</th>
-            <th>Era</th>
-            <th>Set</th>
-            <th>Lang</th>
-            <th>Finish</th>
-            <th>Grade</th>
-            <th class="num">Qty</th>
-            <th class="num">Cost/Ea</th>
-            <th class="num">Market/Ea</th>
-            <th class="num">Total Cost</th>
-            <th class="num">Total Market</th>
-            <th>Acquired</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+
+    <div class="subtab-panel" id="sub-slabs">
+      <div class="toolbar">
+        <input type="search" id="slabsSearch" placeholder="Search name, set, #...">
+        <select id="slabsEraFilter">
+          <option value="">All Eras</option>
+          <option value="Modern">Modern</option>
+          <option value="Mid-Era">Mid-Era</option>
+          <option value="Vintage">Vintage</option>
+        </select>
+        <span class="spacer"></span>
+        <button class="btn secondary" id="slabsExportCsv">Export CSV</button>
+        <button class="btn primary" id="slabsAddBtn">+ Add Slab</button>
+      </div>
+      <div class="table-wrap">
+        <table id="slabsTable" class="inv-table">
+          <thead>
+            <tr>
+              <th class="sticky-col sticky-1">Name</th>
+              <th class="sticky-col sticky-2">#</th>
+              <th>Era</th>
+              <th>Set</th>
+              <th>Lang</th>
+              <th>Finish</th>
+              <th>Grade</th>
+              <th class="num">Qty</th>
+              <th class="num">Cost/Ea</th>
+              <th class="num">Market/Ea</th>
+              <th class="num">Total Cost</th>
+              <th class="num">Total Market</th>
+              <th>Acquired</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
   </section>
 
@@ -206,6 +212,7 @@
   <!-- SHOWS / EVENTS -->
   <section class="tab-panel" id="tab-shows">
     <div class="toolbar">
+      <button class="btn" id="showModeBtn">Start Show Mode</button>
       <span class="spacer"></span>
       <button class="btn secondary" id="showsExportCsv">Export CSV</button>
       <button class="btn primary" id="showsAddBtn">+ Add Show</button>
@@ -223,9 +230,7 @@
       </table>
     </div>
     <p class="muted" style="margin-top:12px;">
-      <strong>Net Profit</strong> = sales gross profit (revenue − cost of cards sold − fees) − table rent − expenses tagged to this show.
-      <strong>Cash Flow</strong> = cash collected from sales − cash spent on buys, table rent, and show expenses (how much your cash changed at the event).
-      Tag a Sale, Purchase, or Expense to a show using the “Show / Event” field on each of those.
+      Add upcoming shows with their table fee. Tap <strong>Start Show Mode</strong> and pick a show — every Sale, Purchase and Expense you log is then tagged to it automatically until you end the show. Click <strong>Open</strong> on any show to see its transactions, Sales total and P/L.
     </p>
   </section>
 
@@ -324,11 +329,20 @@
     </p>
   </section>
 
-  <!-- BACKUP -->
-  <section class="tab-panel" id="tab-backup">
+  <!-- SYSTEM -->
+  <section class="tab-panel" id="tab-system">
+    <div class="card narrow">
+      <h2>Initial Start Mode</h2>
+      <p class="muted">Turn this <strong>ON</strong> while you load your starting inventory and set your opening Cash &amp; Bank. While it's on, any Sale, Purchase or Expense you record will <strong>not</strong> affect your cash/bank balances — so nothing is double-counted during setup. Turn it <strong>OFF</strong> before recording real day-to-day transactions.</p>
+      <div class="backup-actions">
+        <button class="btn primary" id="initialModeBtn">Turn On Initial Start Mode</button>
+      </div>
+      <p class="muted" id="initialModeStatus"></p>
+    </div>
+
     <div class="card narrow">
       <h2>Backup &amp; Restore</h2>
-      <p class="muted">Your data is stored locally in this browser only. Export a backup regularly, especially before clearing browser data.</p>
+      <p class="muted">Your data is stored locally on this device only. Export a backup regularly, especially before clearing browser data.</p>
       <div class="backup-actions">
         <button class="btn primary" id="backupExportBtn">Download Backup (JSON)</button>
         <label class="btn secondary file-btn">
@@ -338,7 +352,7 @@
       </div>
       <hr>
       <h3>Danger Zone</h3>
-      <p class="muted">Permanently erase all inventory, sales, purchases, trades, and expense records from this browser.</p>
+      <p class="muted">Permanently erase all inventory, sales, purchases, trades, expenses and finance records from this browser.</p>
       <button class="btn danger" id="clearAllBtn">Clear All Data</button>
     </div>
   </section>
@@ -358,7 +372,7 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="app.js?v=17"></script>
+<script src="app.js?v=18"></script>
 <script>
   // Register the service worker for offline use + installability.
   if ('serviceWorker' in navigator) {

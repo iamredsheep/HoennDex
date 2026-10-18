@@ -19,7 +19,7 @@ const GRADING_COMPANIES = ['PSA', 'CGC', 'BGS', 'SGC', 'Other'];
 /* ---------------- Data store ---------------- */
 
 function defaultData() {
-  return { inventory: [], lots: [], shows: [], purchases: [], sales: [], trades: [], expenses: [], finance: { cashLedger: [] } };
+  return { inventory: [], lots: [], shows: [], purchases: [], sales: [], trades: [], expenses: [], finance: { cashLedger: [] }, activeShowId: null, initialStartMode: false };
 }
 
 let DATA = loadData();
@@ -172,12 +172,14 @@ function switchTab(tab) {
   renderAll();
 }
 
-// Sub-tab navigation inside the Transactions tab (Purchases / Sales / Trades).
-document.querySelectorAll('#txnSubtabs .subtab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
+// Sub-tab navigation (generic — any tab panel containing a .subtabs nav).
+document.querySelectorAll('.subtabs').forEach(nav => {
+  nav.addEventListener('click', e => {
+    const btn = e.target.closest('.subtab-btn'); if (!btn) return;
     const st = btn.dataset.subtab;
-    document.querySelectorAll('#txnSubtabs .subtab-btn').forEach(b => b.classList.toggle('active', b === btn));
-    document.querySelectorAll('#tab-transactions .subtab-panel').forEach(p => p.classList.toggle('active', p.id === 'sub-' + st));
+    nav.querySelectorAll('.subtab-btn').forEach(b => b.classList.toggle('active', b === btn));
+    const panel = nav.closest('.tab-panel');
+    panel.querySelectorAll('.subtab-panel').forEach(p => p.classList.toggle('active', p.id === 'sub-' + st));
   });
 });
 
@@ -255,7 +257,6 @@ if (singlesThead) singlesThead.addEventListener('click', e => {
 });
 
 function renderSingles() {
-  renderOverviewInto('singlesOverview', itemsOfCategory('Single Card'), 'Singles Overview — Cost Basis by Era');
   const rows = sortSingles(invApplyFilters(itemsOfCategory('Single Card'), 'singlesSearch', 'singlesEraFilter'));
   document.querySelectorAll('#singlesTable thead th[data-sort]').forEach(th => {
     th.setAttribute('aria-sort', th.dataset.sort === singlesSort.col ? (singlesSort.dir === 1 ? 'ascending' : 'descending') : 'none');
@@ -284,7 +285,6 @@ function renderSingles() {
 
 /* ---- Slabs tab (category: Graded Slabs) ---- */
 function renderSlabs() {
-  renderOverviewInto('slabsOverview', itemsOfCategory('Graded Slabs'), 'Slabs Overview — Cost Basis by Era');
   const rows = invApplyFilters(itemsOfCategory('Graded Slabs'), 'slabsSearch', 'slabsEraFilter');
   const tbody = document.querySelector('#slabsTable tbody');
   if (!rows.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="14">No graded slabs yet.</td></tr>`; return; }
@@ -636,7 +636,7 @@ document.getElementById('purExportCsv').addEventListener('click', () => {
 
 function openPurchaseModal(p) {
   const isEdit = !!p;
-  const v = p || { date: todayISO(), vendor: '', category: 'Singles', description: '', amount: 0, showId: '', notes: '' };
+  const v = p || { date: todayISO(), vendor: '', category: 'Singles', description: '', amount: 0, showId: DATA.activeShowId || '', notes: '' };
   const html = `
     <div class="form-grid">
       <div class="field"><label>Date</label><input id="f_date" type="date" value="${esc(v.date)}"></div>
@@ -670,6 +670,7 @@ function openPurchaseModal(p) {
         notes: body.querySelector('#f_notes').value.trim(),
         paymentMethod: pay.paymentMethod,
         payment: pay.payment,
+        setupEntry: isEdit ? !!p.setupEntry : !!DATA.initialStartMode,
       };
       if (isEdit) Object.assign(p, record); else DATA.purchases.push(record);
       saveData(); renderAll(); closeModal();
@@ -724,7 +725,7 @@ document.getElementById('expExportCsv').addEventListener('click', () => {
 
 function openExpenseModal(x) {
   const isEdit = !!x;
-  const v = x || { date: todayISO(), category: 'Shipping Supplies', description: '', amount: 0, showId: '', notes: '' };
+  const v = x || { date: todayISO(), category: 'Shipping Supplies', description: '', amount: 0, showId: DATA.activeShowId || '', notes: '' };
   const html = `
     <div class="form-grid">
       <div class="field"><label>Date</label><input id="f_date" type="date" value="${esc(v.date)}"></div>
@@ -755,6 +756,7 @@ function openExpenseModal(x) {
         notes: body.querySelector('#f_notes').value.trim(),
         paymentMethod: pay.paymentMethod,
         payment: pay.payment,
+        setupEntry: isEdit ? !!x.setupEntry : !!DATA.initialStartMode,
       };
       if (isEdit) Object.assign(x, record); else DATA.expenses.push(record);
       saveData(); renderAll(); closeModal();
@@ -1084,7 +1086,7 @@ function openSaleModal(sale) {
   const isEdit = !!sale;
   editingSaleId = isEdit ? sale.id : null;
   saleLineItems = isEdit ? sale.items.map(i => ({ ...i })) : [];
-  const v = sale || { date: todayISO(), buyer: '', platform: 'Local/Card Show', fees: 0, shipping: 0, showId: '', notes: '' };
+  const v = sale || { date: todayISO(), buyer: '', platform: 'Local/Card Show', fees: 0, shipping: 0, showId: DATA.activeShowId || '', notes: '' };
 
   const html = `
     <div class="form-grid">
@@ -1187,6 +1189,7 @@ function openSaleModal(sale) {
         notes: body.querySelector('#f_notes').value.trim(),
         paymentMethod: pay.paymentMethod,
         payment: pay.payment,
+        setupEntry: isEdit ? !!sale.setupEntry : !!DATA.initialStartMode,
       };
       if (isEdit) Object.assign(sale, record); else DATA.sales.push(record);
       saveData(); renderAll(); closeModal();
@@ -1793,6 +1796,7 @@ function showAccounting(show) {
 }
 
 function renderShows() {
+  updateShowModeBtn();
   const tbody = document.querySelector('#showsTable tbody');
   const rows = DATA.shows.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   tbody.innerHTML = '';
@@ -1806,7 +1810,7 @@ function renderShows() {
     tr.className = 'show-row';
     tr.innerHTML = `
       <td>${esc(show.date)}</td>
-      <td class="wrap">${esc(show.name)}</td>
+      <td class="wrap">${esc(show.name)}${show.id === DATA.activeShowId ? ' <span class="badge graded">● LIVE</span>' : ''}</td>
       <td class="wrap">${esc(show.location)}</td>
       <td class="num">${money(a.tableRent)}</td>
       <td class="num">${money(a.buys)}</td>
@@ -1815,6 +1819,7 @@ function renderShows() {
       <td class="num ${a.netProfit >= 0 ? 'pos' : 'neg'}">${money(a.netProfit)}</td>
       <td class="num ${a.cashFlow >= 0 ? 'pos' : 'neg'}">${money(a.cashFlow)}</td>
       <td><div class="row-actions">
+        <button class="btn primary small" data-act="open" data-id="${show.id}">Open</button>
         <button class="btn secondary small" data-act="edit" data-id="${show.id}">Edit</button>
         <button class="btn danger small" data-act="del" data-id="${show.id}">Delete</button>
       </div></td>`;
@@ -1825,6 +1830,7 @@ function renderShows() {
 document.querySelector('#showsTable tbody').addEventListener('click', e => {
   const btn = e.target.closest('button'); if (!btn) return;
   const show = findShow(btn.dataset.id); if (!show) return;
+  if (btn.dataset.act === 'open') openShowDetailModal(show);
   if (btn.dataset.act === 'edit') openShowModal(show);
   if (btn.dataset.act === 'del') {
     const a = showAccounting(show);
@@ -1856,6 +1862,105 @@ document.getElementById('showsExportCsv').addEventListener('click', () => {
     { label: 'Cash Flow', get: r => r.cashFlow.toFixed(2) }, { label: 'Notes', get: r => r.notes },
   ]);
 });
+
+/* ---- Show Mode: tag all new transactions to the active show ---- */
+function updateShowModeBtn() {
+  const btn = document.getElementById('showModeBtn'); if (!btn) return;
+  if (DATA.activeShowId) {
+    const s = findShow(DATA.activeShowId);
+    btn.textContent = 'End Show Mode' + (s ? ' — ' + s.name : '');
+    btn.classList.add('mode-on');
+  } else {
+    btn.textContent = 'Start Show Mode';
+    btn.classList.remove('mode-on');
+  }
+}
+
+function openShowPicker() {
+  if (!DATA.shows.length) { alert('Add a show first with "+ Add Show", then start Show Mode.'); return; }
+  const opts = DATA.shows.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+    .map(s => `<option value="${s.id}">${esc(s.name)}${s.date ? ' — ' + esc(s.date) : ''}</option>`).join('');
+  const html = `
+    <div class="form-grid"><div class="field full"><label>Which show are you at?</label><select id="f_showPick">${opts}</select></div></div>
+    <p class="muted">While Show Mode is on, every Sale, Purchase and Expense you add is tagged to this show automatically. Tap the button again to end it.</p>
+    <div class="form-actions">
+      <button class="btn secondary" id="cancelBtn">Cancel</button>
+      <button class="btn primary" id="startBtn">Start Show Mode</button>
+    </div>`;
+  openModal('Start Show Mode', html, body => {
+    body.querySelector('#cancelBtn').addEventListener('click', closeModal);
+    body.querySelector('#startBtn').addEventListener('click', () => {
+      DATA.activeShowId = body.querySelector('#f_showPick').value;
+      saveData(); renderAll(); closeModal(); showToast('Show Mode started.');
+    });
+  });
+}
+
+{
+  const smBtn = document.getElementById('showModeBtn');
+  if (smBtn) smBtn.addEventListener('click', () => {
+    if (DATA.activeShowId) { DATA.activeShowId = null; saveData(); renderAll(); showToast('Show Mode ended.'); }
+    else openShowPicker();
+  });
+}
+
+// Show detail / history: the transactions tagged to a show, plus its Sales & P/L.
+function openShowDetailModal(show) {
+  const a = showAccounting(show);
+  const sales = DATA.sales.filter(s => s.showId === show.id);
+  const purchases = DATA.purchases.filter(p => p.showId === show.id);
+  const expenses = DATA.expenses.filter(x => x.showId === show.id);
+  const txns = [];
+  for (const s of sales) txns.push({ date: s.date, type: 'Sale', detail: s.items.map(i => `${i.qty}× ${i.name}`).join(', ') || (s.buyer || '—'), amount: saleTotals(s).revenue });
+  for (const p of purchases) txns.push({ date: p.date, type: 'Purchase', detail: (p.description || p.category || '') + (p.vendor ? ` (${p.vendor})` : ''), amount: -num(p.amount) });
+  for (const x of expenses) txns.push({ date: x.date, type: 'Expense', detail: (x.category || '') + (x.description ? ` — ${x.description}` : ''), amount: -num(x.amount) });
+  txns.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  const list = txns.length ? txns.map(t => `
+    <tr><td>${esc(t.date)}</td><td>${esc(t.type)}</td><td class="wrap">${esc(t.detail)}</td>
+    <td class="num ${t.amount >= 0 ? 'pos' : 'neg'}">${money(t.amount)}</td></tr>`).join('')
+    : `<tr class="empty-row"><td colspan="4">No transactions tagged to this show yet.</td></tr>`;
+  const html = `
+    <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(118px,1fr));margin-bottom:14px;">
+      <div class="stat-card"><div class="label">Table Rent</div><div class="value">${money(a.tableRent)}</div></div>
+      <div class="stat-card"><div class="label">Sales</div><div class="value">${money(a.revenue)}</div><div class="sub">${sales.length} sale(s)</div></div>
+      <div class="stat-card"><div class="label">Buys</div><div class="value">${money(a.buys)}</div></div>
+      <div class="stat-card"><div class="label">Net P/L</div><div class="value ${a.netProfit >= 0 ? 'pos' : 'neg'}">${money(a.netProfit)}</div><div class="sub">after rent &amp; expenses</div></div>
+      <div class="stat-card"><div class="label">Cash Flow</div><div class="value ${a.cashFlow >= 0 ? 'pos' : 'neg'}">${money(a.cashFlow)}</div></div>
+    </div>
+    <div class="table-wrap">
+      <table><thead><tr><th>Date</th><th>Type</th><th>Detail</th><th class="num">Amount</th></tr></thead><tbody>${list}</tbody></table>
+    </div>
+    <div class="form-actions"><button class="btn secondary" id="closeBtn">Close</button></div>`;
+  openModal(`${show.name}${show.date ? ' — ' + show.date : ''}`, html, body => {
+    body.querySelector('#closeBtn').addEventListener('click', closeModal);
+  });
+}
+
+/* ---- Active-mode banners + Initial Start Mode ---- */
+function renderModeBanner() {
+  const el = document.getElementById('modeBanner'); if (!el) return;
+  let html = '';
+  if (DATA.initialStartMode) html += `<div class="mode-banner setup">⚙️ Initial Start Mode is ON — new Sales, Purchases &amp; Expenses won't affect your cash/bank. <button class="btn small secondary" id="bannerEndSetup">Turn off</button></div>`;
+  if (DATA.activeShowId) { const s = findShow(DATA.activeShowId); html += `<div class="mode-banner show">🎪 Show Mode: <strong>${esc(s ? s.name : '')}</strong> — new transactions are tagged to this show. <button class="btn small secondary" id="bannerEndShow">End show</button></div>`; }
+  el.innerHTML = html;
+  const es = document.getElementById('bannerEndSetup'); if (es) es.addEventListener('click', () => { DATA.initialStartMode = false; saveData(); renderAll(); showToast('Initial Start Mode off.'); });
+  const esh = document.getElementById('bannerEndShow'); if (esh) esh.addEventListener('click', () => { DATA.activeShowId = null; saveData(); renderAll(); showToast('Show Mode ended.'); });
+}
+
+function renderInitialMode() {
+  const btn = document.getElementById('initialModeBtn');
+  const status = document.getElementById('initialModeStatus');
+  if (btn) { btn.textContent = DATA.initialStartMode ? 'Turn Off Initial Start Mode' : 'Turn On Initial Start Mode'; btn.classList.toggle('mode-on', !!DATA.initialStartMode); }
+  if (status) status.textContent = DATA.initialStartMode ? 'Currently ON — setup entries will not move your cash or bank.' : 'Currently OFF — transactions affect your cash and bank normally.';
+}
+{
+  const imBtn = document.getElementById('initialModeBtn');
+  if (imBtn) imBtn.addEventListener('click', () => {
+    DATA.initialStartMode = !DATA.initialStartMode;
+    saveData(); renderAll();
+    showToast(DATA.initialStartMode ? 'Initial Start Mode ON.' : 'Initial Start Mode OFF.');
+  });
+}
 
 function openShowModal(show) {
   const isEdit = !!show;
@@ -2056,9 +2161,9 @@ function inventoryTotals() {
 function financeBalances() {
   let cash = 0, bank = 0;
   for (const e of ((DATA.finance && DATA.finance.cashLedger) || [])) { cash += num(e.cashDelta); bank += num(e.bankDelta); }
-  for (const s of DATA.sales) { cash += num(s.payment && s.payment.cash); bank += num(s.payment && s.payment.bank); }
-  for (const p of DATA.purchases) { cash -= num(p.payment && p.payment.cash); bank -= num(p.payment && p.payment.bank); }
-  for (const x of DATA.expenses) { cash -= num(x.payment && x.payment.cash); bank -= num(x.payment && x.payment.bank); }
+  for (const s of DATA.sales) { if (s.setupEntry) continue; cash += num(s.payment && s.payment.cash); bank += num(s.payment && s.payment.bank); }
+  for (const p of DATA.purchases) { if (p.setupEntry) continue; cash -= num(p.payment && p.payment.cash); bank -= num(p.payment && p.payment.bank); }
+  for (const x of DATA.expenses) { if (x.setupEntry) continue; cash -= num(x.payment && x.payment.cash); bank -= num(x.payment && x.payment.bank); }
   return { cash, bank, available: cash + bank };
 }
 
@@ -2066,9 +2171,9 @@ function financeBalances() {
 function cashActivity() {
   const out = [];
   for (const e of ((DATA.finance && DATA.finance.cashLedger) || [])) out.push({ src: 'adjust', id: e.id, date: e.date, label: e.label || 'Adjustment', cash: num(e.cashDelta), bank: num(e.bankDelta) });
-  for (const s of DATA.sales) { const p = s.payment || {}; if (num(p.cash) || num(p.bank)) out.push({ src: 'Sale', date: s.date, label: 'Sale' + (s.buyer ? ' — ' + s.buyer : ''), cash: num(p.cash), bank: num(p.bank) }); }
-  for (const p of DATA.purchases) { const pm = p.payment || {}; if (num(pm.cash) || num(pm.bank)) out.push({ src: 'Purchase', date: p.date, label: 'Purchase' + (p.vendor ? ' — ' + p.vendor : ''), cash: -num(pm.cash), bank: -num(pm.bank) }); }
-  for (const x of DATA.expenses) { const pm = x.payment || {}; if (num(pm.cash) || num(pm.bank)) out.push({ src: 'Expense', date: x.date, label: 'Expense — ' + (x.category || ''), cash: -num(pm.cash), bank: -num(pm.bank) }); }
+  for (const s of DATA.sales) { if (s.setupEntry) continue; const p = s.payment || {}; if (num(p.cash) || num(p.bank)) out.push({ src: 'Sale', date: s.date, label: 'Sale' + (s.buyer ? ' — ' + s.buyer : ''), cash: num(p.cash), bank: num(p.bank) }); }
+  for (const p of DATA.purchases) { if (p.setupEntry) continue; const pm = p.payment || {}; if (num(pm.cash) || num(pm.bank)) out.push({ src: 'Purchase', date: p.date, label: 'Purchase' + (p.vendor ? ' — ' + p.vendor : ''), cash: -num(pm.cash), bank: -num(pm.bank) }); }
+  for (const x of DATA.expenses) { if (x.setupEntry) continue; const pm = x.payment || {}; if (num(pm.cash) || num(pm.bank)) out.push({ src: 'Expense', date: x.date, label: 'Expense — ' + (x.category || ''), cash: -num(pm.cash), bank: -num(pm.bank) }); }
   out.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   return out;
 }
@@ -2218,6 +2323,8 @@ function renderAll() {
   renderTrades();
   renderExpenses();
   renderFinance();
+  renderModeBanner();
+  renderInitialMode();
 }
 
 renderAll();
