@@ -218,9 +218,48 @@ const rowActions = id => `
       </div></td>`;
 
 /* ---- Singles tab (category: Single Card) ---- */
+// Column sort: click a header to sort; click again to reverse.
+const SINGLES_COLS = {
+  name: { get: i => i.name || '', type: 'text' },
+  cardNumber: { get: i => i.cardNumber || '', type: 'text' },
+  era: { get: i => i.era || '', type: 'text' },
+  set: { get: i => i.set || '', type: 'text' },
+  language: { get: i => i.language || '', type: 'text' },
+  finish: { get: i => i.finish || '', type: 'text' },
+  condition: { get: i => i.condition || '', type: 'text' },
+  quantity: { get: i => num(i.quantity), type: 'num' },
+  costPerUnit: { get: i => num(i.costPerUnit), type: 'num' },
+  marketPerUnit: { get: i => num(i.marketPerUnit), type: 'num' },
+  totalCost: { get: i => num(i.quantity) * num(i.costPerUnit), type: 'num' },
+  totalMarket: { get: i => num(i.quantity) * num(i.marketPerUnit), type: 'num' },
+  dateAcquired: { get: i => i.dateAcquired || '', type: 'text' },
+};
+let singlesSort = { col: 'name', dir: 1 };
+
+function sortSingles(rows) {
+  const def = SINGLES_COLS[singlesSort.col] || SINGLES_COLS.name;
+  return rows.slice().sort((a, b) => {
+    const av = def.get(a), bv = def.get(b);
+    const c = def.type === 'num' ? (av - bv) : String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: 'base' });
+    return c * singlesSort.dir;
+  });
+}
+
+const singlesThead = document.querySelector('#singlesTable thead');
+if (singlesThead) singlesThead.addEventListener('click', e => {
+  const th = e.target.closest('th[data-sort]'); if (!th) return;
+  const col = th.dataset.sort;
+  if (singlesSort.col === col) singlesSort.dir *= -1;
+  else { singlesSort = { col, dir: 1 }; }
+  renderSingles();
+});
+
 function renderSingles() {
   renderOverviewInto('singlesOverview', itemsOfCategory('Single Card'), 'Singles Overview — Cost Basis by Era');
-  const rows = invApplyFilters(itemsOfCategory('Single Card'), 'singlesSearch', 'singlesEraFilter');
+  const rows = sortSingles(invApplyFilters(itemsOfCategory('Single Card'), 'singlesSearch', 'singlesEraFilter'));
+  document.querySelectorAll('#singlesTable thead th[data-sort]').forEach(th => {
+    th.setAttribute('aria-sort', th.dataset.sort === singlesSort.col ? (singlesSort.dir === 1 ? 'ascending' : 'descending') : 'none');
+  });
   const tbody = document.querySelector('#singlesTable tbody');
   if (!rows.length) { tbody.innerHTML = `<tr class="empty-row"><td colspan="14">No single cards yet.</td></tr>`; return; }
   tbody.innerHTML = rows.map(item => {

@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon.svg">
-<link rel="stylesheet" href="style.css?v=16">
+<link rel="stylesheet" href="style.css?v=17">
 </head>
 <body>
 
@@ -77,19 +77,19 @@
       <table id="singlesTable" class="inv-table">
         <thead>
           <tr>
-            <th class="sticky-col sticky-1">Name</th>
-            <th class="sticky-col sticky-2">#</th>
-            <th>Era</th>
-            <th>Set</th>
-            <th>Lang</th>
-            <th>Finish</th>
-            <th>Condition</th>
-            <th class="num">Qty</th>
-            <th class="num">Cost/Ea</th>
-            <th class="num">Market/Ea</th>
-            <th class="num">Total Cost</th>
-            <th class="num">Total Market</th>
-            <th>Acquired</th>
+            <th class="sticky-col sticky-1 sortable" data-sort="name">Name</th>
+            <th class="sticky-col sticky-2 sortable" data-sort="cardNumber">#</th>
+            <th class="sortable" data-sort="era">Era</th>
+            <th class="sortable" data-sort="set">Set</th>
+            <th class="sortable" data-sort="language">Lang</th>
+            <th class="sortable" data-sort="finish">Finish</th>
+            <th class="sortable" data-sort="condition">Condition</th>
+            <th class="num sortable" data-sort="quantity">Qty</th>
+            <th class="num sortable" data-sort="costPerUnit">Cost/Ea</th>
+            <th class="num sortable" data-sort="marketPerUnit">Market/Ea</th>
+            <th class="num sortable" data-sort="totalCost">Total Cost</th>
+            <th class="num sortable" data-sort="totalMarket">Total Market</th>
+            <th class="sortable" data-sort="dateAcquired">Acquired</th>
             <th></th>
           </tr>
         </thead>
@@ -358,7 +358,7 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="app.js?v=16"></script>
+<script src="app.js?v=17"></script>
 <script>
   // Register the service worker for offline use + installability.
   if ('serviceWorker' in navigator) {

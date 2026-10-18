@@ -143,6 +143,10 @@ th, td {
   white-space: nowrap;
 }
 th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; cursor: default; }
+th.sortable { cursor: pointer; }
+th.sortable:hover { color: var(--ink); }
+th.sortable[aria-sort="ascending"]::after { content: " ▲"; font-size: 0.75em; color: var(--red); }
+th.sortable[aria-sort="descending"]::after { content: " ▼"; font-size: 0.75em; color: var(--red); }
 tbody tr:hover { background: #fafbfc; }
 tbody tr:last-child td { border-bottom: none; }
 td.wrap { white-space: normal; max-width: 260px; }
