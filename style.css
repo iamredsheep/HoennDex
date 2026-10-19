@@ -100,6 +100,26 @@ body {
 .mode-banner.setup { background: #e7f0ff; color: #1a3c7a; }
 .btn.mode-on { background: var(--green); color: #fff; }
 
+/* Cloud-sync sign-in overlay */
+.auth-overlay {
+  display: none; position: fixed; inset: 0; z-index: 500;
+  background: rgba(20,22,26,0.92);
+  align-items: center; justify-content: center; padding: 20px;
+}
+.auth-overlay.show { display: flex; }
+.auth-card {
+  background: var(--card-bg); color: var(--ink);
+  border-radius: 12px; padding: 24px; width: 100%; max-width: 380px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.35);
+}
+.auth-card h2 { margin: 0 0 6px; }
+.auth-card input {
+  width: 100%; padding: 11px 12px; margin-top: 10px;
+  border: 1px solid var(--border); border-radius: 8px; font-size: 0.95rem; font-family: inherit;
+}
+.auth-card .btn { width: 100%; justify-content: center; margin-top: 12px; }
+.auth-error { color: var(--red); font-size: 0.85rem; min-height: 1.1em; margin-top: 8px; }
+
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 

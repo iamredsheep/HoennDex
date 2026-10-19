@@ -1,11 +1,12 @@
 /* HoennDex service worker — offline app shell caching.
    Bump CACHE_VERSION whenever any cached file changes so clients update. */
-const CACHE_VERSION = 'hoenndex-v18';
+const CACHE_VERSION = 'hoenndex-v19';
 const APP_SHELL = [
   './',
   './index.html',
   './style.css',
   './app.js',
+  './sync.js',
   './manifest.webmanifest',
   './icon.svg'
 ];

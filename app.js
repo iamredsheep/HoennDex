@@ -52,7 +52,8 @@ function loadData() {
 function saveData() {
   localStorage.setItem(STORE_KEY, JSON.stringify(DATA));
   const el = document.getElementById('saveStatus');
-  el.textContent = 'Saved ' + new Date().toLocaleTimeString();
+  if (el) el.textContent = 'Saved ' + new Date().toLocaleTimeString();
+  if (window.onDataSaved) window.onDataSaved(); // cloud sync hook (sync.js)
 }
 
 function genId() {

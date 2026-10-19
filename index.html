@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon.svg">
-<link rel="stylesheet" href="style.css?v=18">
+<link rel="stylesheet" href="style.css?v=19">
 </head>
 <body>
 
@@ -332,6 +332,15 @@
   <!-- SYSTEM -->
   <section class="tab-panel" id="tab-system">
     <div class="card narrow">
+      <h2>Cloud Sync</h2>
+      <p class="muted" id="syncAccount">Not signed in.</p>
+      <div class="backup-actions">
+        <button class="btn secondary" id="signOutBtn" style="display:none">Sign out</button>
+      </div>
+      <p class="muted" style="margin-top:6px;">Sign in with the same email on your phone and desktop and your data stays in sync automatically — no manual backups needed.</p>
+    </div>
+
+    <div class="card narrow">
       <h2>Initial Start Mode</h2>
       <p class="muted">Turn this <strong>ON</strong> while you load your starting inventory and set your opening Cash &amp; Bank. While it's on, any Sale, Purchase or Expense you record will <strong>not</strong> affect your cash/bank balances — so nothing is double-counted during setup. Turn it <strong>OFF</strong> before recording real day-to-day transactions.</p>
       <div class="backup-actions">
@@ -372,7 +381,11 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="app.js?v=18"></script>
+<script src="app.js?v=19"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="sync.js?v=19"></script>
 <script>
   // Register the service worker for offline use + installability.
   if ('serviceWorker' in navigator) {
